@@ -1,0 +1,561 @@
+@import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Rubik:wght@400;600;800&display=swap');
+
+:root {
+  --noche: #1a1730;
+  --piedra: #3a3550;
+  --oro: #e8b23c;
+  --terracota: #c1502e;
+  --hueso: #f2e9d8;
+  --verde-coca: #5c7a4f;
+  --rojo-peligro: #b23a3a;
+}
+
+* { box-sizing: border-box; }
+
+html, body { height: 100%; }
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  background: radial-gradient(circle at 50% 0%, #2a2450 0%, var(--noche) 70%);
+  font-family: 'Rubik', sans-serif;
+  color: var(--hueso);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+
+.pantalla { display: none; width: 100%; max-width: 640px; text-align: center; }
+.pantalla.activa { display: block; }
+
+h1 {
+  font-family: 'Press Start 2P', cursive;
+  font-size: clamp(20px, 6vw, 38px);
+  color: var(--oro);
+  text-shadow: 3px 3px 0 var(--terracota);
+  letter-spacing: 1px;
+  margin-bottom: 4px;
+}
+
+h2 { font-family: 'Press Start 2P', cursive; font-size: 18px; color: var(--oro); }
+
+.subtitulo { color: #c9c3e0; margin-bottom: 28px; }
+
+.tarjeta {
+  background: var(--piedra);
+  border: 3px solid var(--oro);
+  border-radius: 10px;
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+input {
+  padding: 12px 14px;
+  border-radius: 6px;
+  border: 2px solid var(--oro);
+  background: var(--noche);
+  color: var(--hueso);
+  font-size: 16px;
+  text-align: center;
+}
+input::placeholder { color: #9a92b8; }
+
+button {
+  padding: 12px 18px;
+  border-radius: 6px;
+  border: none;
+  background: var(--oro);
+  color: var(--noche);
+  font-weight: 800;
+  font-size: 15px;
+  cursor: pointer;
+  transition: transform 0.1s ease;
+}
+button:hover { transform: translateY(-2px); }
+button:active { transform: translateY(0); }
+
+.separador { color: #8a83a8; font-size: 13px; margin: 4px 0; }
+.error { color: var(--rojo-peligro); font-weight: 600; min-height: 20px; }
+
+/* --- Selección de personajes --- */
+.lista-personajes {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+  margin-top: 12px;
+}
+.opcion-personaje {
+  background: var(--piedra);
+  border: 3px solid var(--verde-coca);
+  border-radius: 10px;
+  padding: 14px 6px;
+  cursor: pointer;
+  transition: border-color 0.15s ease, transform 0.1s ease;
+}
+.opcion-personaje:hover { transform: translateY(-3px); border-color: var(--oro); }
+.opcion-personaje.elegido { border-color: var(--oro); background: #4a3f66; }
+.opcion-personaje .icono { height: 72px; width: auto; display: block; margin: 0 auto; image-rendering: pixelated; }
+.opcion-personaje .nombre { font-size: 12px; margin-top: 6px; display: block; }
+.opcion-personaje small { display: block; min-height: 26px; margin-top: 5px; color: #b9b2d0; font-size: 10px; line-height: 1.25; }
+
+#codigo-sala { color: var(--terracota); }
+
+.musica-oculta {
+  position: fixed;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+  border: 0;
+}
+
+/* --- HUD de batalla --- */
+.hud {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 16px;
+}
+.jugador-hud { text-align: left; }
+.jugador-hud:last-child { text-align: right; }
+.nombre-jugador { font-size: 13px; font-weight: 600; margin-bottom: 4px; }
+.vs { font-family: 'Press Start 2P', cursive; color: var(--terracota); }
+.centro-hud { min-width: 82px; text-align: center; }
+#ronda-hud { color: #b3aad0; font: 8px 'Press Start 2P', cursive; margin-bottom: 4px; }
+#tiempo-hud { color: var(--oro); font: 13px 'Press Start 2P', cursive; margin-top: 5px; }
+.nombre-jugador::after { content: attr(data-rounds); color: var(--oro); margin-left: 7px; letter-spacing: 3px; }
+
+.barra-vida {
+  height: 18px;
+  background: #2a2440;
+  border: 2px solid var(--oro);
+  border-radius: 9px;
+  overflow: hidden;
+}
+.vida-actual {
+  height: 100%;
+  width: 100%;
+  background: linear-gradient(90deg, var(--verde-coca), #7fae6b);
+  transition: width 0.25s ease;
+}
+.jugador-hud:last-child .vida-actual { margin-left: auto; }
+
+/* --- Pantalla de batalla: pantalla completa --- */
+#pantalla-batalla.activa {
+  position: fixed;
+  inset: 0;
+  max-width: none;
+  width: 100vw;
+  height: 100vh;
+  height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  padding: 0;
+  z-index: 20;
+  background: var(--noche);
+}
+
+/* --- Arena --- */
+.arena {
+  flex: 1;
+  min-height: 0;
+  background:
+    radial-gradient(circle at 50% 18%, rgba(246, 196, 87, 0.26) 0 8%, transparent 9%),
+    linear-gradient(180deg, #17152f 0%, #39345d 58%, #75533a 100%);
+  position: relative;
+  overflow: hidden;
+  margin: 0 12px;
+  border-radius: 10px;
+  border: 3px solid var(--piedra);
+}
+.arena::after {
+  content: "";
+  position: absolute;
+  z-index: 1;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 17%;
+  background: linear-gradient(180deg, #7e6142, #3d2d25);
+  border-top: 3px solid rgba(232, 178, 60, 0.45);
+  box-shadow: inset 0 12px 24px rgba(0, 0, 0, 0.25);
+}
+.cordillera {
+  position: absolute;
+  inset: auto -10% 16%;
+  height: 46%;
+  pointer-events: none;
+  clip-path: polygon(0 100%, 0 74%, 8% 46%, 15% 68%, 24% 24%, 33% 65%, 42% 34%, 51% 72%, 62% 18%, 72% 61%, 82% 31%, 91% 68%, 100% 42%, 100% 100%);
+}
+.cordillera-lejana { background: #2d2a50; opacity: 0.8; transform: translateY(-28%); }
+.cordillera-cercana { background: #423653; }
+#efectos-combate { position: absolute; inset: 0; z-index: 6; pointer-events: none; }
+#anuncio-ronda {
+  position: absolute;
+  z-index: 9;
+  inset: 42% 0 auto;
+  opacity: 0;
+  transform: scale(0.75);
+  color: var(--oro);
+  font: clamp(18px, 4vw, 38px) 'Press Start 2P', cursive;
+  text-shadow: 4px 4px 0 var(--terracota), 0 0 24px #000;
+  transition: opacity .16s ease, transform .2s ease;
+  pointer-events: none;
+}
+#anuncio-ronda.visible { opacity: 1; transform: scale(1); }
+.luchador {
+  position: absolute;
+  bottom: 6%;
+  height: 46%;
+  width: 32%;
+  display: flex;
+  align-items: flex-end;
+  z-index: 4;
+  transform: translateX(-50%);
+  transition: left 0.06s linear, bottom 0.14s ease, filter 0.15s ease;
+}
+.luchador img {
+  height: 100%;
+  width: auto;
+  max-width: none;
+  image-rendering: pixelated;
+  transform-origin: 50% 100%;
+  filter: drop-shadow(0 8px 5px rgba(0,0,0,0.5));
+}
+.luchador.ko { height: 32%; width: 52%; }
+.luchador.ko img { height: auto; max-height: 100%; max-width: 100%; }
+.luchador.espejo img { transform: scaleX(-1); }
+.luchador.golpeado { animation: golpe-anim 0.22s ease; filter: brightness(1.22) saturate(1.2); }
+.luchador.atacando img { animation: ataque-avance 0.21s cubic-bezier(.2,.8,.3,1); }
+.luchador.espejo.atacando img { animation-name: ataque-avance-espejo; }
+.luchador.ataque-especial img { filter: drop-shadow(0 0 14px #ffb52e) brightness(1.25); }
+.luchador.saltando { bottom: 33%; }
+.luchador.agachado { bottom: 3%; }
+.luchador.agachado img { animation: agachar-postura 0.16s ease forwards; }
+.luchador.espejo.agachado img { animation-name: agachar-postura-espejo; }
+.luchador.bloqueando { filter: drop-shadow(0 0 10px #6fb3ff) brightness(1.15); }
+.luchador.ko { filter: grayscale(1) opacity(0.6); }
+
+@keyframes golpe-anim {
+  0% { transform: translateX(-50%) translateX(0); filter: brightness(1); }
+  30% { transform: translateX(-50%) translateX(-10px); filter: brightness(2) saturate(3); }
+  100% { transform: translateX(-50%) translateX(0); filter: brightness(1); }
+}
+
+@keyframes ataque-avance {
+  0%, 100% { transform: translateX(0); }
+  48% { transform: translateX(11%); }
+}
+@keyframes ataque-avance-espejo {
+  0%, 100% { transform: scaleX(-1) translateX(0); }
+  48% { transform: scaleX(-1) translateX(11%); }
+}
+@keyframes agachar-postura {
+  to { transform: translateY(8%) rotate(-4deg); }
+}
+@keyframes agachar-postura-espejo {
+  to { transform: scaleX(-1) translateY(8%) rotate(-4deg); }
+}
+@keyframes sacudir-arena {
+  0%, 100% { transform: translate(0); }
+  25% { transform: translate(-5px, 2px); }
+  50% { transform: translate(5px, -2px); }
+  75% { transform: translate(-3px, 1px); }
+}
+.arena.sacudida { animation: sacudir-arena 0.16s linear; }
+.impacto {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  color: #fff3b0;
+  font-family: 'Press Start 2P', cursive;
+  font-size: clamp(12px, 2vw, 19px);
+  text-shadow: 3px 3px 0 var(--terracota);
+  animation: impacto-subir 0.62s ease-out forwards;
+  white-space: nowrap;
+}
+.impacto.suave { color: #a9d7ff; text-shadow: 2px 2px 0 #28476b; font-size: clamp(9px, 1.4vw, 13px); }
+@keyframes impacto-subir {
+  from { opacity: 1; transform: translate(-50%, 0) scale(0.82); }
+  to { opacity: 0; transform: translate(-50%, -62px) scale(1.08); }
+}
+
+.pie-batalla {
+  padding: 8px 16px 14px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+.recargas { display: flex; gap: 8px; justify-content: center; }
+.recarga {
+  --listo: 100%;
+  position: relative;
+  width: 56px;
+  height: 24px;
+  overflow: hidden;
+  border: 1px solid #6c6586;
+  border-radius: 5px;
+  background: #29233f;
+}
+.recarga::before {
+  content: "";
+  position: absolute;
+  inset: auto 0 0;
+  height: var(--listo);
+  background: linear-gradient(180deg, #5c7a4f, #7fae6b);
+  transition: height .06s linear;
+}
+.recarga.especial::before { background: linear-gradient(180deg, #ad462a, var(--terracota)); }
+.recarga span { position: relative; z-index: 1; font: 10px 'Press Start 2P', cursive; line-height: 24px; }
+.recarga.lista { box-shadow: 0 0 10px rgba(232, 178, 60, .5); border-color: var(--oro); }
+
+.controles-tactiles { display: none; width: 100%; justify-content: space-between; gap: 16px; }
+.grupo-movimiento, .grupo-ataque { display: grid; grid-template-columns: repeat(2, 48px); gap: 7px; }
+.controles-tactiles button {
+  min-width: 48px;
+  min-height: 42px;
+  padding: 0;
+  border: 1px solid #857d9f;
+  background: #3a3550;
+  color: var(--hueso);
+  touch-action: none;
+  user-select: none;
+}
+.controles-tactiles button.presionado { background: var(--oro); color: var(--noche); transform: translateY(2px); }
+
+.estadisticas-final {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(110px, 1fr));
+  gap: 10px;
+  margin: 22px auto 0;
+  max-width: 420px;
+}
+.estadisticas-final div { padding: 14px; border: 2px solid var(--piedra); border-radius: 8px; background: rgba(58,53,80,.65); }
+.estadisticas-final strong { display: block; color: var(--oro); font: 16px 'Press Start 2P', cursive; }
+.estadisticas-final span { display: block; margin-top: 7px; color: #b3aad0; font-size: 12px; }
+#marcador-final { color: var(--terracota); font: 22px 'Press Start 2P', cursive; }
+
+#pantalla-final button { margin-top: 20px; }
+#titulo-final { color: var(--oro); }
+
+@media (max-width: 420px) {
+  .lista-personajes { grid-template-columns: repeat(2, 1fr); }
+  .luchador { height: 40%; }
+  .hud { gap: 6px; padding: 8px; }
+  .nombre-jugador { font-size: 11px; }
+  .barra-vida { height: 14px; }
+  .pie-batalla { padding: 6px 10px 10px; }
+}
+
+@media (hover: none), (pointer: coarse) {
+  .controles-tactiles { display: flex; }
+  .arena { margin: 0 6px; }
+  .luchador { height: 36%; }
+}
+
+/* --- Menú de modos y configuración --- */
+.acciones-esquina { position: fixed; top: 16px; right: 16px; z-index: 60; display: flex; gap: 8px; }
+.boton-icono { width: 44px; height: 44px; padding: 0; border: 2px solid var(--oro); border-radius: 50%; background: rgba(26,23,48,.9); color: var(--hueso); font-size: 20px; }
+.modos .modo-btn { display: flex; flex-direction: column; gap: 6px; text-align: left; }
+.modos .modo-btn b { font-family: 'Press Start 2P', cursive; font-size: 11px; }
+.modos .modo-btn span { font-weight: 400; font-size: 12px; opacity: .78; }
+button.secundario { background: #514a6b; color: var(--hueso); border: 1px solid #766d94; }
+#btn-volver-sala { margin-top: 18px; }
+.modal { display:none; position:fixed; inset:0; z-index:100; background:rgba(0,0,0,.65); align-items:center; justify-content:center; padding:20px; }
+.modal.abierto { display:flex; }
+.modal-contenido { width:min(420px,100%); position:relative; background:var(--piedra); border:3px solid var(--oro); border-radius:12px; padding:26px; }
+.cerrar { position:absolute; top:8px; right:8px; width:36px; height:36px; padding:0; background:transparent; color:var(--hueso); font-size:26px; }
+.ajuste { display:flex; align-items:center; justify-content:space-between; gap:20px; padding:14px 4px; border-bottom:1px solid rgba(255,255,255,.1); }
+.ajuste input { width:22px; height:22px; accent-color:var(--oro); }
+.nota-config { color:#b9b2d0; font-size:12px; }
+#progreso-historia { color:var(--oro); font-weight:700; min-height:20px; }
+@media (max-width:640px) { .acciones-esquina { top:8px; right:8px; } .boton-icono { width:38px; height:38px; } }
+
+/* --- Portada principal con imagen del juego --- */
+#pantalla-inicio {
+  max-width: 760px;
+}
+.portada-juego {
+  position: relative;
+  width: 100%;
+  margin: 0 auto 18px;
+  border: 3px solid var(--oro);
+  border-radius: 16px;
+  overflow: hidden;
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.35);
+}
+.portada-img {
+  display: block;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  object-fit: cover;
+  object-position: center top;
+}
+.portada-capa {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, rgba(10, 10, 20, 0.05) 0%, rgba(15, 12, 30, 0.4) 52%, rgba(15, 12, 30, 0.85) 100%);
+}
+.portada-texto {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  padding: 22px 18px 18px;
+}
+.portada-texto h1 {
+  margin: 0 0 10px;
+}
+.portada-texto .subtitulo {
+  margin: 0;
+  font-size: 15px;
+  color: #f7f0dd;
+  text-shadow: 0 2px 8px rgba(0,0,0,.75);
+}
+.subtexto-panel {
+  margin: 0 0 6px;
+  color: #c9c3e0;
+  font-size: 13px;
+}
+
+/* --- Arena con mapas turísticos --- */
+.arena {
+  background-size: cover;
+  background-position: center center;
+  background-repeat: no-repeat;
+}
+.arena::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, rgba(12, 16, 28, 0.12) 0%, rgba(12, 18, 34, 0.1) 42%, rgba(15, 16, 30, 0.28) 100%);
+  z-index: 0;
+}
+.cordillera { display: none; }
+.nombre-mapa {
+  position: absolute;
+  top: 14px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 8;
+  padding: 8px 14px;
+  border-radius: 999px;
+  background: rgba(20, 18, 35, 0.72);
+  border: 1px solid rgba(232, 178, 60, 0.75);
+  color: var(--oro);
+  font: 11px 'Press Start 2P', cursive;
+  text-align: center;
+  max-width: calc(100% - 32px);
+}
+
+/* --- Pie de batalla simplificado (sin guía de teclas visible) --- */
+.recargas {
+  width: 100%;
+  flex-wrap: wrap;
+}
+.recarga {
+  width: 112px;
+  height: 28px;
+}
+.recarga span {
+  display: block;
+  padding: 0 6px;
+  line-height: 28px;
+  font-size: 8px;
+}
+
+@media (max-width: 640px) {
+  .portada-texto h1 {
+    font-size: clamp(18px, 5.8vw, 28px);
+  }
+  .portada-texto .subtitulo {
+    font-size: 13px;
+  }
+  .nombre-mapa {
+    font-size: 9px;
+  }
+  .recarga {
+    width: 98px;
+  }
+}
+
+
+/* --- Acciones y pausa dentro de batalla --- */
+.acciones-batalla {
+  position: absolute;
+  top: 10px;
+  right: 14px;
+  z-index: 85;
+  display: flex;
+  gap: 8px;
+}
+.batalla-icono {
+  width: 40px;
+  height: 40px;
+  font-size: 17px;
+  background: rgba(26, 23, 48, .88);
+  backdrop-filter: blur(4px);
+}
+.batalla-icono.peligro,
+.boton-peligro {
+  background: #7f2d35 !important;
+  color: #fff !important;
+  border-color: #d06a70 !important;
+}
+.pausa-contenido {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  text-align: center;
+}
+.pausa-contenido h2 { margin: 4px 0 8px; }
+.pausa-contenido button { width: 100%; }
+.ayuda-esc {
+  margin: 4px 0 0;
+  color: #aaa3c2;
+  font-size: 11px;
+}
+#pantalla-batalla.pausada .arena,
+#pantalla-batalla.pausada .hud,
+#pantalla-batalla.pausada .pie-batalla {
+  filter: brightness(.55) saturate(.7);
+}
+
+@media (max-width: 640px) {
+  .acciones-batalla { top: 7px; right: 8px; gap: 5px; }
+  .batalla-icono { width: 34px; height: 34px; font-size: 14px; }
+  .centro-hud { margin-right: 104px; }
+}
+
+/* Corrección: los botones de batalla no deben cubrir el HUD ni las barras de vida */
+.acciones-batalla {
+  top: 76px;
+  right: 18px;
+}
+
+@media (max-width: 640px) {
+  .acciones-batalla {
+    top: 64px;
+    right: 10px;
+    gap: 5px;
+  }
+  .centro-hud {
+    margin-right: 0;
+  }
+}
+
+@media (max-width: 420px) {
+  .acciones-batalla {
+    top: 58px;
+    right: 8px;
+  }
+  .batalla-icono {
+    width: 32px;
+    height: 32px;
+    font-size: 13px;
+  }
+}

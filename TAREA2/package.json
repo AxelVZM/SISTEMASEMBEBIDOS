@@ -1,0 +1,17 @@
+{
+  "name": "andes-maqanakuy",
+  "version": "2.0.0",
+  "description": "Andes Maqanakuy - juego de pelea 2D multijugador con animales andinos - servidor Node.js + Socket.io",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "test": "node test_flujo.js"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "socket.io": "^4.7.5"
+  },
+  "devDependencies": {
+    "socket.io-client": "^4.8.3"
+  }
+}

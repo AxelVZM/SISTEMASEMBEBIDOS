@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Andes Maqanakuy</title>
+<link rel="stylesheet" href="style.css" />
+</head>
+<body>
+<iframe id="musica-frame" class="musica-oculta" src="https://www.youtube.com/embed/khGumqLho7w?autoplay=1&loop=1&playlist=khGumqLho7w&controls=0&rel=0&enablejsapi=1" title="Música ambiental" allow="autoplay; encrypted-media" aria-hidden="true" tabindex="-1"></iframe>
+
+<div class="acciones-esquina">
+  <button id="btn-musica" class="boton-icono" aria-label="Silenciar música" title="Silenciar música">🔊</button>
+  <button id="btn-config" class="boton-icono" aria-label="Configuración" title="Configuración">⚙️</button>
+</div>
+
+<div id="pantalla-inicio" class="pantalla activa">
+  <div class="portada-juego">
+    <img src="assets/ui/portada-principal.png" alt="Personajes de Andes Maqanakuy" class="portada-img" />
+    <div class="portada-capa"></div>
+    <div class="portada-texto">
+      <h1>ANDES MAQANAKUY</h1>
+      <p class="subtitulo">Duelo 1v1 con las bestias del Ande</p>
+    </div>
+  </div>
+
+  <div class="tarjeta modos">
+    <input id="input-nombre" type="text" placeholder="Tu nombre" maxlength="16" />
+    <button id="btn-historia" class="modo-btn"><b>📖 MODO HISTORIA</b><span>Enfrenta a todos los personajes, uno por uno.</span></button>
+    <button id="btn-local" class="modo-btn"><b>🤖 MODO LOCAL</b><span>Pelea contra la máquina.</span></button>
+    <button id="btn-multijugador" class="modo-btn"><b>🌐 MULTIJUGADOR</b><span>Crea una sala o únete a un rival.</span></button>
+  </div>
+  <p id="mensaje-error" class="error"></p>
+</div>
+
+<div id="pantalla-online" class="pantalla">
+  <h2>MULTIJUGADOR</h2>
+  <div class="tarjeta">
+    <p class="subtexto-panel">Comparte el código generado o únete con uno existente.</p>
+    <button id="btn-crear">Crear sala</button>
+    <div class="separador">— o —</div>
+    <input id="input-codigo" type="text" placeholder="Código de sala" maxlength="4" style="text-transform:uppercase" />
+    <button id="btn-unirse">Unirse a sala</button>
+    <p id="mensaje-error-online" class="error"></p>
+    <button class="secundario btn-volver">← Volver</button>
+  </div>
+</div>
+
+<div id="pantalla-sala" class="pantalla">
+  <h2 id="titulo-sala">Sala: <span id="codigo-sala"></span></h2>
+  <p id="texto-sala">Comparte este código con tu rival</p>
+  <p id="estado-espera">Esperando rival...</p>
+  <div id="selector-personajes" class="grid-personajes" style="display:none">
+    <p>Elige tu luchador:</p>
+    <div id="lista-personajes" class="lista-personajes"></div>
+  </div>
+  <button class="secundario btn-volver" id="btn-volver-sala">← Menú principal</button>
+</div>
+
+<div id="pantalla-batalla" class="pantalla">
+  <div class="acciones-batalla">
+    <button id="btn-pausa-batalla" class="boton-icono batalla-icono" aria-label="Pausar" title="Pausar">⏸</button>
+    <button id="btn-config-batalla" class="boton-icono batalla-icono" aria-label="Configuración" title="Configuración">⚙️</button>
+    <button id="btn-salir-batalla" class="boton-icono batalla-icono peligro" aria-label="Salir de la batalla" title="Salir de la batalla">✕</button>
+  </div>
+  <div class="hud">
+    <div class="jugador-hud" id="hud-jugador1"><div class="nombre-jugador"></div><div class="barra-vida"><div class="vida-actual"></div></div></div>
+    <div class="centro-hud"><div id="ronda-hud">RONDA 1</div><div class="vs">VS</div><div id="tiempo-hud">60</div></div>
+    <div class="jugador-hud" id="hud-jugador2"><div class="nombre-jugador"></div><div class="barra-vida"><div class="vida-actual"></div></div></div>
+  </div>
+  <div class="arena" id="arena">
+    <div class="cordillera cordillera-lejana"></div><div class="cordillera cordillera-cercana"></div>
+    <div class="nombre-mapa" id="nombre-mapa"></div>
+    <div id="efectos-combate" aria-live="polite"></div><div id="anuncio-ronda" aria-live="assertive"></div>
+    <div class="luchador" id="luchador1"></div><div class="luchador" id="luchador2"></div>
+  </div>
+  <div class="pie-batalla">
+    <div class="recargas" aria-label="Disponibilidad de ataques">
+      <div class="recarga" data-ataque="golpe"><span>Golpe</span><i></i></div>
+      <div class="recarga" data-ataque="patada"><span>Patada</span><i></i></div>
+      <div class="recarga especial" data-ataque="especial"><span>Especial</span><i></i></div>
+    </div>
+    <div class="controles-tactiles" aria-label="Controles táctiles"><div class="grupo-movimiento"><button data-tecla="a" aria-label="Izquierda">◀</button><button data-tecla="w" aria-label="Saltar">▲</button><button data-tecla="s" aria-label="Agacharse">▼</button><button data-tecla="d" aria-label="Derecha">▶</button></div><div class="grupo-ataque"><button data-tecla="u" aria-label="Defender">🛡️</button><button data-tecla="j" aria-label="Golpe">👊</button><button data-tecla="k" aria-label="Patada">🦶</button><button data-tecla="l" aria-label="Especial">✦</button></div></div>
+  </div>
+</div>
+
+<div id="pantalla-final" class="pantalla">
+  <h2 id="titulo-final"></h2><p id="marcador-final"></p><p id="progreso-historia"></p>
+  <div id="estadisticas-final" class="estadisticas-final"></div>
+  <button id="btn-revancha">Revancha</button>
+  <button id="btn-menu-final" class="secundario">Menú principal</button>
+</div>
+
+<div id="modal-pausa" class="modal" aria-hidden="true">
+  <div class="modal-contenido pausa-contenido">
+    <h2>PAUSA</h2>
+    <p class="nota-config">La batalla está detenida.</p>
+    <button id="btn-continuar">Continuar</button>
+    <button id="btn-config-pausa" class="secundario">⚙️ Configuración</button>
+    <button id="btn-salir-pausa" class="secundario boton-peligro">Salir al menú principal</button>
+    <p class="ayuda-esc">Presiona ESC para continuar</p>
+  </div>
+</div>
+
+<div id="modal-config" class="modal" aria-hidden="true">
+  <div class="modal-contenido">
+    <button id="btn-cerrar-config" class="cerrar">×</button>
+    <h2>CONFIGURACIÓN</h2>
+    <label class="ajuste"><span>Efectos de sonido</span><input id="toggle-sfx" type="checkbox" checked></label>
+    <label class="ajuste"><span>Música en menús</span><input id="toggle-musica" type="checkbox" checked></label>
+    <p class="nota-config">La música siempre se pausa durante las peleas.</p>
+  </div>
+</div>
+
+<script src="/socket.io/socket.io.js"></script><script src="game.js"></script>
+</body></html>
