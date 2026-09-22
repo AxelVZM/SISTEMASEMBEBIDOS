@@ -118,3 +118,12 @@ No necesito nada más para que funcione. Si quieres subir el nivel:
 - Multijugador: crear o unirse a una sala online.
 - Música: control desde la pantalla principal y pausa automática al entrar en batalla.
 - Configuración: activar/desactivar música de menú y efectos de sonido.
+
+## Corrección de combate AWS RANGO V2
+
+- El ataque se anima inmediatamente en el cliente al presionar la tecla, incluso si el rival está lejos.
+- La distancia NO impide ejecutar la animación.
+- El servidor aplica daño únicamente si `distancia <= rango del ataque + alcance del personaje`.
+- Si está fuera de rango: no hay daño, no hay retroceso y cuenta como fallo.
+- Si está dentro de rango pero esquiva por postura: no hay daño y se muestra `ESQUIVADO`.
+- Los recursos `game.js` y `style.css` usan `?v=aws-rango-v2` para evitar que el navegador conserve la versión anterior en caché.

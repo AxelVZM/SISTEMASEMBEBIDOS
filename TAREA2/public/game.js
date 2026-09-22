@@ -272,8 +272,16 @@ const ataquesListosEn = { golpe: 0, patada: 0, especial: 0 };
 function lanzarAtaque(ataque) {
   const ahora = performance.now();
   if (!enBatalla || juegoPausado || bloqueando || ahora < ataquesListosEn[ataque]) return;
+
   ataquesListosEn[ataque] = ahora + COOLDOWNS[ataque];
   enviarMovimiento(saltando ? "jump" : teclasPresionadas.has("s") ? "duck" : "idle");
+
+  // La respuesta visual del jugador es LOCAL e inmediata: no depende de la distancia
+  // al rival ni de la latencia con el servidor. El servidor decide por separado si
+  // ese ataque realmente alcanza al rival y, solo entonces, aplica daño.
+  animarAtaque(socket.id, ataque);
+  if (sonidos[ataque]) sonidos[ataque]();
+
   socket.emit("atacar", { attack: ataque });
 }
 
@@ -585,8 +593,37 @@ function pintarBatalla(estado) {
   aplicarEstadoVisual(l2, p2, miIndex === 1);
 }
 
+
+function animarAtaque(attackerId, attack) {
+  const idsEnOrden = ultimoEstado ? ultimoEstado.players.map((p) => p.id) : [];
+  const elementos = [document.getElementById("luchador1"), document.getElementById("luchador2")];
+  const poseAtaque = POSE_POR_ATAQUE[attack] || "punch";
+  idsEnOrden.forEach((id, i) => {
+    if (id !== attackerId) return;
+    const el = elementos[i];
+    if (!el) return;
+    const characterId = el.dataset.character;
+    if (!characterId) return;
+    clearTimeout(timersPose[el.id + "-atk"]);
+    setPoseLuchador(el, characterId, poseAtaque);
+    el.dataset.poseHasta = String(performance.now() + 300);
+    el.classList.add("atacando", `ataque-${attack}`);
+    timersPose[el.id + "-atk"] = setTimeout(() => {
+      el.classList.remove("atacando", `ataque-${attack}`);
+      if (!el.classList.contains("ko")) setPoseLuchador(el, characterId, "idle");
+    }, 280);
+  });
+}
+
+socket.on("ataque_ejecutado", ({ attackerId, attack }) => {
+  // El atacante local ya mostró su animación instantáneamente en lanzarAtaque().
+  // Este evento sincroniza la misma animación para el otro jugador (o la IA).
+  if (attackerId === socket.id) return;
+  animarAtaque(attackerId, attack);
+  if (sonidos[attack]) sonidos[attack]();
+});
+
 socket.on("golpe", ({ attackerId, targetId, attack, dmg, bloqueado }) => {
-  sonidos[attack] && sonidos[attack]();
   if (bloqueado) setTimeout(() => sonidos.bloqueo(), 60);
 
   const idsEnOrden = ultimoEstado ? ultimoEstado.players.map((p) => p.id) : [];
@@ -598,17 +635,6 @@ socket.on("golpe", ({ attackerId, targetId, attack, dmg, bloqueado }) => {
     if (!el) return;
     const characterId = el.dataset.character;
     if (!characterId) return;
-
-    if (id === attackerId) {
-      clearTimeout(timersPose[el.id + "-atk"]);
-      setPoseLuchador(el, characterId, poseAtaque);
-      el.dataset.poseHasta = String(performance.now() + 280);
-      el.classList.add("atacando", `ataque-${attack}`);
-      timersPose[el.id + "-atk"] = setTimeout(() => {
-        el.classList.remove("atacando", `ataque-${attack}`);
-        if (!el.classList.contains("ko")) setPoseLuchador(el, characterId, "idle");
-      }, 260);
-    }
 
     if (id === targetId) {
       clearTimeout(timersPose[el.id + "-hurt"]);
@@ -632,10 +658,13 @@ socket.on("golpe", ({ attackerId, targetId, attack, dmg, bloqueado }) => {
   });
 });
 
-socket.on("ataque_fallido", ({ attack }) => {
+socket.on("ataque_fallido", ({ reason }) => {
   sonidos.fallo();
-  const el = document.getElementById(miIndex === 0 ? "luchador1" : "luchador2");
-  mostrarImpacto(el, attack === "especial" ? "FUERA DE ALCANCE" : "MUY LEJOS", true);
+  // La animación del ataque ya se mostró. Si está fuera de alcance, simplemente no causa daño.
+  if (reason === "esquiva") {
+    const el = document.getElementById(miIndex === 0 ? "luchador1" : "luchador2");
+    mostrarImpacto(el, "ESQUIVADO", true);
+  }
 });
 
 socket.on("combo", ({ attackerId, count }) => {

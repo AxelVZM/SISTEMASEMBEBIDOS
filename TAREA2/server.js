@@ -49,8 +49,33 @@ function ejecutarAtaque(code, room, attackerId, attack, socketFallido=null) {
   const now=Date.now(), last=attacker.lastAttack[attack]||0; if(now-last<def.cooldown) return; attacker.lastAttack[attack]=now;
   const rivalId=room.order.find(id=>id!==attackerId), rival=room.players[rivalId]; if(!rival) return;
   const cfg=CHARACTERS[attacker.character], rivalCfg=CHARACTERS[rival.character], distancia=Math.abs(attacker.x-rival.x);
-  const fuera=distancia>def.range+cfg.reach, esquivado=(def.height==="high"&&rival.estado==="duck")||(def.height==="low"&&rival.estado==="jump");
-  if(fuera||esquivado){ attacker.combo=0; attacker.stats.misses++; if(socketFallido) socketFallido.emit("ataque_fallido",{attack,distancia,reason:esquivado?"esquiva":"distancia"}); emitirEstado(code,room); return; }
+  // La animación del ataque se emite siempre que el cooldown permite ejecutar la acción.
+  io.to(code).emit("ataque_ejecutado", { attackerId, attack });
+  // El jugador puede ejecutar y ver la animación del ataque desde cualquier posición,
+  // pero el daño solo se aplica si el rival está dentro del alcance real del ataque.
+  const alcanceReal = def.range + cfg.reach;
+  const fueraDeAlcance = distancia > alcanceReal;
+  const esquivado=(def.height==="high"&&rival.estado==="duck")||(def.height==="low"&&rival.estado==="jump");
+
+  // IMPORTANTE: ejecutar un ataque y acertar un ataque son cosas distintas.
+  // La animación ya fue enviada arriba. Aquí SOLO se decide si corresponde daño.
+  if (fueraDeAlcance) {
+    attacker.combo=0;
+    attacker.stats.misses++;
+    if(socketFallido) socketFallido.emit("ataque_fallido",{attack,distancia,alcance:alcanceReal,reason:"distancia"});
+    emitirEstado(code,room);
+    return;
+  }
+
+  // Si estaba dentro del alcance pero el rival usó la postura correcta, no hay daño
+  // y el atacante recibe el aviso visual ESQUIVADO.
+  if (esquivado) {
+    attacker.combo=0;
+    attacker.stats.misses++;
+    if(socketFallido) socketFallido.emit("ataque_fallido",{attack,distancia,alcance:alcanceReal,reason:"esquiva"});
+    emitirEstado(code,room);
+    return;
+  }
   attacker.combo=now-attacker.comboAt<=1350?attacker.combo+1:1; attacker.comboAt=now; attacker.stats.maxCombo=Math.max(attacker.stats.maxCombo,attacker.combo);
   const comboBonus=1+Math.min(attacker.combo-1,3)*.08, bloqueado=!!rival.blocking; let reduccion=BLOQUEO_REDUCCION; if(attack==="especial"&&attacker.character==="coya") reduccion=.48;
   const poderEspecial=attack==="especial"&&attacker.character==="jaguar"?1.2:1; const base=def.dmg*cfg.power*poderEspecial*comboBonus/rivalCfg.defense; const dmg=Math.max(1,Math.round(base*(bloqueado?1-reduccion:1))); rival.hp=Math.max(0,rival.hp-dmg);
@@ -93,7 +118,7 @@ io.on("connection", socket=>{
   socket.on("disconnect",()=>{ if(!currentRoom||!rooms[currentRoom])return; const room=rooms[currentRoom]; delete room.players[socket.id]; room.order=room.order.filter(id=>id!==socket.id); if(room.mode!=="online"||room.order.length===0)delete rooms[currentRoom]; else {room.started=false;room.finished=false;room.roundActive=false;room.paused=false;io.to(currentRoom).emit("rival_desconectado");emitirEstado(currentRoom,room);} });
 });
 
-app.get("/healthz", (req, res) => res.status(200).json({ ok: true, app: "andes-maqanakuy" }));
+app.get("/healthz", (req, res) => res.status(200).json({ ok: true, app: "andes-maqanakuy", version: "aws-rango-v2" }));
 app.get("/personajes",(req,res)=>res.json(CHARACTERS));
 
 function iniciarServidor(puerto) {
