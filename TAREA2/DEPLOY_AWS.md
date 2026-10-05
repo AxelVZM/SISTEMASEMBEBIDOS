@@ -1,40 +1,61 @@
-# Andes Maqanakuy — despliegue en AWS EC2
+# Actualizar ANDES MAQANAKUY en AWS EC2
 
-Este proyecto está preparado para ejecutarse detrás de Nginx con PM2 en una instancia Ubuntu de EC2.
+Esta versión está preparada para Ubuntu + Node.js + PM2 + Nginx.
 
-## Puertos recomendados en el Security Group
-- 22/TCP: SSH, idealmente restringido a tu IP.
-- 80/TCP: HTTP público.
-- 443/TCP: HTTPS público cuando agregues dominio/certificado.
-- NO expongas 3000 públicamente: Nginx se conecta localmente a Node.js.
+## 1. Subir a GitHub
 
-## Instalación inicial (Ubuntu)
+Reemplaza el contenido de `TAREA2` por el contenido de este paquete y desde tu PC:
+
 ```bash
-sudo apt update
-sudo apt install -y nginx git curl
-curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash -
-sudo apt install -y nodejs
-sudo npm install -g pm2
+git add TAREA2
+git commit -m "TAREA2 Andes Maqanakuy Combat Plus v3"
+git push origin main
 ```
 
-## Clonar y entrar a TAREA2
+## 2. Actualizar EC2
+
+En tu instancia:
+
 ```bash
-cd ~
-git clone https://github.com/AxelVZM/SISTEMASEMBEBIDOS.git
-cd SISTEMASEMBEBIDOS/TAREA2
+cd ~/SISTEMASEMBEBIDOS/TAREA2
+git pull origin main
 npm ci --omit=dev
-```
-
-## Iniciar con PM2
-```bash
-pm2 start ecosystem.config.cjs
+pm2 restart andes-maqanakuy
 pm2 save
-pm2 startup
 ```
-Ejecuta también el comando adicional que `pm2 startup` muestre en pantalla y luego vuelve a ejecutar `pm2 save`.
 
-## Nginx
-Desde `TAREA2`:
+Si `npm ci` no puede usarse por un lockfile modificado localmente:
+
+```bash
+npm install --omit=dev
+pm2 restart andes-maqanakuy
+```
+
+## 3. Verificar versión
+
+```bash
+curl http://127.0.0.1:3000/healthz
+```
+
+Respuesta esperada:
+
+```json
+{"ok":true,"app":"andes-maqanakuy","version":"netplay-v5"}
+```
+
+Después:
+
+```bash
+pm2 status
+sudo nginx -t
+sudo systemctl restart nginx
+curl -I http://127.0.0.1
+```
+
+## 4. Nginx
+
+Si todavía no está instalado el sitio:
+
 ```bash
 sudo cp nginx-andes-maqanakuy.conf /etc/nginx/sites-available/andes-maqanakuy
 sudo ln -sf /etc/nginx/sites-available/andes-maqanakuy /etc/nginx/sites-enabled/andes-maqanakuy
@@ -43,29 +64,13 @@ sudo nginx -t
 sudo systemctl restart nginx
 ```
 
-Luego abre en tu navegador:
-`http://IP_PUBLICA_DE_TU_EC2`
+Apache debe permanecer detenido si Nginx usa el puerto 80:
 
-## Actualizar después de subir cambios a GitHub
 ```bash
-cd ~/SISTEMASEMBEBIDOS/TAREA2
-git pull origin main
-npm ci --omit=dev
-pm2 restart andes-maqanakuy
+sudo systemctl stop apache2
+sudo systemctl disable apache2
 ```
 
-## Comprobaciones
-```bash
-pm2 status
-pm2 logs andes-maqanakuy
-curl http://127.0.0.1:3000/healthz
-sudo nginx -t
-sudo systemctl status nginx
-```
+## 5. Caché del navegador
 
-## HTTPS opcional con dominio
-Cuando tu dominio apunte a la IP pública/Elastic IP:
-```bash
-sudo apt install -y certbot python3-certbot-nginx
-sudo certbot --nginx -d tudominio.com -d www.tudominio.com
-```
+Esta versión usa `?v=netplay-v5` en CSS/JS. Tras actualizar, abre la IP pública y usa una recarga fuerte (`Ctrl + Shift + R`) si el navegador conserva recursos antiguos.

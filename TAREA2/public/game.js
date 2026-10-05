@@ -1,709 +1,318 @@
-const socket = io();
+const socket = io({ transports: ['websocket', 'polling'], upgrade:true, rememberUpgrade:true, reconnection:true, reconnectionAttempts:Infinity, reconnectionDelay:250, reconnectionDelayMax:1000, timeout:5000 });
 
-// Cada personaje tiene una imagen distinta para cada pose/accion
 const CHARACTERS = {
-  coya: personaje("Coya", "coya", "Equilibrada · Filo solar"),
-  cuy: personaje("Cuy", "cuy", "Resistente · Mochila guardiana"),
-  gallito: personaje("Gallito de las Rocas", "gallito", "Rápido · Puños de acero"),
-  jaguar: personaje("Jaguar", "jaguar", "Poderoso · Zarpazo del sol"),
-  oso: personaje("Oso de Anteojos", "oso", "Tanque · Guardia de montaña"),
-  gato: personaje("Gato Andino", "gato", "Muy veloz · Garra lunar")
+  coya:    { name:'Coya', estilo:'Equilibrada · Filo solar', icon:'img/coya_idle.png', sheet:'spritesheets/coya.png' },
+  cuy:     { name:'Cuy', estilo:'Resistente · Mochila guardiana', icon:'img/cuy_idle.png', sheet:'spritesheets/cuy.png' },
+  gallito: { name:'Gallito de las Rocas', estilo:'Rápido · Ráfaga escarlata', icon:'img/gallito_idle.png', sheet:'spritesheets/gallito.png' },
+  jaguar:  { name:'Jaguar', estilo:'Poderoso · Zarpazo del sol', icon:'img/jaguar_idle.png', sheet:'spritesheets/jaguar.png' },
+  oso:     { name:'Oso de Anteojos', estilo:'Tanque · Guardia de montaña', icon:'img/oso_idle.png', sheet:'spritesheets/oso.png' },
+  gato:    { name:'Gato Andino', estilo:'Muy veloz · Garra lunar', icon:'img/gato_idle.png', sheet:'spritesheets/gato.png' }
 };
-
-function personaje(name, id, estilo) {
-  const poses = {};
-  ["idle", "walk", "punch", "kick", "hurt", "block", "ko"].forEach((pose) => {
-    poses[pose] = `img/${id}_${pose}.png`;
-  });
-  return { name, estilo, poses };
-}
-
-// El ataque "especial" reutiliza la pose de patada pero con mas efecto visual
-const POSE_POR_ATAQUE = { golpe: "punch", patada: "kick", especial: "kick" };
 const STAGES = [
-  { nombre: "Machu Picchu", archivo: "/assets/mapas-cusco/machu-picchu.png" },
-  { nombre: "Sacsayhuamán", archivo: "/assets/mapas-cusco/sacsayhuaman.png" },
-  { nombre: "Qorikancha", archivo: "/assets/mapas-cusco/qorikancha.png" },
-  { nombre: "Plaza de Armas", archivo: "/assets/mapas-cusco/plaza-de-armas.png" },
-  { nombre: "Ollantaytambo", archivo: "/assets/mapas-cusco/ollantaytambo.png" }
- ];
-STAGES.forEach((stage) => {
-  const img = new Image();
-  img.decoding = "async";
-  img.src = stage.archivo;
-});
+  { nombre:'Machu Picchu', archivo:'/assets/mapas-cusco/machu-picchu.png' },
+  { nombre:'Sacsayhuamán', archivo:'/assets/mapas-cusco/sacsayhuaman.png' },
+  { nombre:'Qorikancha', archivo:'/assets/mapas-cusco/qorikancha.png' },
+  { nombre:'Plaza de Armas', archivo:'/assets/mapas-cusco/plaza-de-armas.png' },
+  { nombre:'Ollantaytambo', archivo:'/assets/mapas-cusco/ollantaytambo.png' }
+];
+const SPRITE_STATES = { idle:0, walk:1, run:2, jump:3, crouch:4, block_high:5, block_low:6, punch_light:7, punch_heavy:8, kick_light:9, kick_heavy:10, special:11, hurt_high:12, hurt_low:13, recoil:14, dodge:15, knockdown:16, getup:17, ko:18, victory:19, defeat:20, intro:21 };
+const STATE_DUR = { idle:560, walk:280, run:220, jump:330, crouch:300, block_high:280, block_low:280, punch_light:170, punch_heavy:250, kick_light:210, kick_heavy:290, special:360, hurt_high:180, hurt_low:180, recoil:220, dodge:190, knockdown:330, getup:240, ko:720, victory:760, defeat:720, intro:650 };
+const SPRITE_SCALE = { coya:{__base:.961}, cuy:{__base:1.094}, gallito:{__base:.959}, jaguar:{__base:.983}, oso:{__base:1.438}, gato:{__base:1.117} };
+const COOLDOWNS = { golpe:115, golpe_fuerte:220, patada:130, patada_fuerte:250, barrido:190, aereo:160, especial:320 };
+const SPECIAL_COST = 70;
+const MENU_TRACK = { id:'khGumqLho7w', nombre:'Tema del menú' };
+const STAGE_TRACKS = [
+  { id:'b6bRGRKFkXA', nombre:'Tema de Machu Picchu' },
+  { id:'9om8qOn4DlQ', nombre:'Tema de Sacsayhuamán' },
+  { id:'lwk_8sRlJPY', nombre:'Tema de Qorikancha' },
+  { id:'kc03xmkjzxM', nombre:'Tema de Plaza de Armas' },
+  { id:'9om8qOn4DlQ', nombre:'Tema de Ollantaytambo' }
+];
+STAGES.forEach(s=>{const i=new Image();i.src=s.archivo;});
+Object.values(CHARACTERS).forEach(c=>{const i=new Image();i.src=c.sheet;});
 
-let miId = null;
-let salaActual = null;
-let miNombre = "";
-let miIndex = -1; // 0 = jugador que crea la sala, 1 = el que se une
-let modoActual = null; // story | local | online
-let musicaSilenciada = localStorage.getItem("maqanakuy-musica") === "off";
-let sfxActivos = localStorage.getItem("maqanakuy-sfx") !== "off";
-let juegoPausado = false;
-let configAbiertaDesdePausa = false;
+const $ = (id)=>document.getElementById(id);
+let miPlayerKey=null, salaActual=null, modoActual=null, miIndex=-1, espectador=false, ultimoEstado=null;
+let enBatalla=false, juegoPausado=false, configAbiertaDesdePausa=false, peleaAnunciada=false;
+let miX=30, saltando=false, localBusyUntil=0, ultimoFrame=performance.now(), ultimoEnvioMov=0;
+let movementSeq=0, pingActual=0;
+const holdAttackTimers={};
+let localNextAttackAt=0;
+const motion=new Map();
+let pistaActualId=null, pistaActualNombre='';
+let musicaSilenciada=localStorage.getItem('maqanakuy-musica')==='off';
+let sfxActivos=localStorage.getItem('maqanakuy-sfx')!=='off';
+let fxActivos=localStorage.getItem('maqanakuy-fx')!=='off';
+let sessionToken=localStorage.getItem('maqanakuy-session') || (window.crypto?.randomUUID ? window.crypto.randomUUID() : `${Date.now()}-${Math.random()}`);
+localStorage.setItem('maqanakuy-session',sessionToken);
+const nombreGuardado=localStorage.getItem('maqanakuy-nombre')||'';
+$('input-nombre').value=nombreGuardado;
+const dificultadGuardada=localStorage.getItem('maqanakuy-dificultad')||'medio';
+let mapaMenuSeleccionado=Math.max(0,Math.min(STAGES.length-1,Number(localStorage.getItem('maqanakuy-mapa'))||0));
+if($('select-dificultad'))$('select-dificultad').value=dificultadGuardada;
+$('select-dificultad')?.addEventListener('change',e=>localStorage.setItem('maqanakuy-dificultad',e.target.value));
 
-// ---------- Navegacion entre pantallas + musica ambiental ----------
-const musicaFrame = document.getElementById("musica-frame");
-function comandoMusica(func) {
-  if (!musicaFrame || !musicaFrame.contentWindow) return;
-  musicaFrame.contentWindow.postMessage(JSON.stringify({ event: "command", func, args: [] }), "*");
+function renderMapasMenu(){
+  const lista=$('menu-lista-mapas');if(!lista)return;
+  lista.innerHTML='';
+  STAGES.forEach((stage,i)=>{
+    const b=document.createElement('button');b.type='button';b.className='mapa-menu-opcion';b.dataset.index=i;
+    b.innerHTML=`<img src="${stage.archivo}" alt="${stage.nombre}"><span>${stage.nombre}</span><i>✓</i>`;
+    b.onclick=()=>{mapaMenuSeleccionado=i;localStorage.setItem('maqanakuy-mapa',String(i));renderMapasMenu();sonidos.seleccion();};
+    b.classList.toggle('elegido',i===mapaMenuSeleccionado);b.setAttribute('aria-pressed',i===mapaMenuSeleccionado?'true':'false');lista.appendChild(b);
+  });
+  const nombre=$('mapa-menu-nombre');if(nombre)nombre.textContent=STAGES[mapaMenuSeleccionado]?.nombre||STAGES[0].nombre;
 }
-function actualizarBotonMusica() {
-  const btn = document.getElementById("btn-musica");
-  if (!btn) return;
-  btn.textContent = musicaSilenciada ? "🔇" : "🔊";
-  btn.setAttribute("aria-label", musicaSilenciada ? "Activar música" : "Silenciar música");
+renderMapasMenu();
+
+// ---------- Música / configuración ----------
+const musicaFrame=$('musica-frame');
+function comandoMusica(func,args=[]){if(musicaFrame?.contentWindow)musicaFrame.contentWindow.postMessage(JSON.stringify({event:'command',func,args}), '*');}
+function srcMusica(videoId){return `https://www.youtube.com/embed/${videoId}?autoplay=1&loop=1&playlist=${videoId}&controls=0&rel=0&enablejsapi=1&playsinline=1`; }
+function pistaDeContexto(){
+  if($('pantalla-batalla').classList.contains('activa')){
+    const st=ultimoEstado || { mode:modoActual||'local', stageIndex:0, storyIndex:0 };
+    const idx=(st.stageIndex||0)%STAGES.length;
+    return STAGE_TRACKS[idx] || STAGE_TRACKS[0];
+  }
+  return MENU_TRACK;
 }
-function sincronizarMusica() {
-  const enPelea = document.getElementById("pantalla-batalla").classList.contains("activa");
-  if (musicaSilenciada || enPelea) comandoMusica("pauseVideo");
-  else comandoMusica("playVideo");
+function cargarPista(track){
+  if(!musicaFrame || !track) return;
+  if(pistaActualId===track.id) return;
+  pistaActualId=track.id;
+  pistaActualNombre=track.nombre||'';
+  musicaFrame.src=srcMusica(track.id);
+}
+function actualizarTextoPista(){
+  const el=$('info-musica-actual');
+  if(!el) return;
+  const track=pistaDeContexto();
+  el.textContent=musicaSilenciada ? 'Música: apagada' : `♪ ${track.nombre}`;
+}
+function actualizarBotonMusica(){const b=$('btn-musica');b.textContent=musicaSilenciada?'🔇':'🔊';b.title=musicaSilenciada?'Activar música':'Silenciar música';}
+function sincronizarMusica(){
+  const track=pistaDeContexto();
+  if(track) cargarPista(track);
+  if(musicaSilenciada) comandoMusica('pauseVideo');
+  else {comandoMusica('playVideo');comandoMusica('setPlaybackQuality',['small']);}
   actualizarBotonMusica();
+  actualizarTextoPista();
 }
-function intentarMusica() { sincronizarMusica(); }
-["pointerdown", "keydown", "touchstart"].forEach((evento) => window.addEventListener(evento, intentarMusica, { once: true, passive: true }));
-function mostrarPantalla(id) {
-  document.querySelectorAll(".pantalla").forEach((p) => p.classList.remove("activa"));
-  document.getElementById(id).classList.add("activa");
-  const acciones = document.querySelector(".acciones-esquina");
-  if (acciones) acciones.style.display = id === "pantalla-inicio" ? "flex" : "none";
-  sincronizarMusica();
-}
-document.getElementById("btn-musica").addEventListener("click", () => {
-  musicaSilenciada = !musicaSilenciada; localStorage.setItem("maqanakuy-musica", musicaSilenciada ? "off" : "on"); sincronizarMusica();
-});
-const modalConfig = document.getElementById("modal-config");
-const toggleMusica = document.getElementById("toggle-musica");
-const toggleSfx = document.getElementById("toggle-sfx");
-toggleMusica.checked = !musicaSilenciada; toggleSfx.checked = sfxActivos; actualizarBotonMusica();
-document.getElementById("btn-config").addEventListener("click", () => { modalConfig.classList.add("abierto"); modalConfig.setAttribute("aria-hidden", "false"); });
-document.getElementById("btn-cerrar-config").addEventListener("click", () => {
-  modalConfig.classList.remove("abierto");
-  modalConfig.setAttribute("aria-hidden", "true");
-  if (configAbiertaDesdePausa && enBatalla) {
-    configAbiertaDesdePausa = false;
-    modalPausa.classList.add("abierto");
-    modalPausa.setAttribute("aria-hidden", "false");
-  }
-});
-modalConfig.addEventListener("click", (e) => { if (e.target === modalConfig) document.getElementById("btn-cerrar-config").click(); });
-toggleMusica.addEventListener("change", () => { musicaSilenciada = !toggleMusica.checked; localStorage.setItem("maqanakuy-musica", musicaSilenciada ? "off" : "on"); sincronizarMusica(); });
-toggleSfx.addEventListener("change", () => { sfxActivos = toggleSfx.checked; localStorage.setItem("maqanakuy-sfx", sfxActivos ? "on" : "off"); });
+['pointerdown','keydown','touchstart'].forEach(ev=>window.addEventListener(ev,sincronizarMusica,{once:true,passive:true}));
+function mostrarPantalla(id){document.querySelectorAll('.pantalla').forEach(p=>p.classList.remove('activa'));$(id).classList.add('activa');document.querySelector('.acciones-esquina').style.display=id==='pantalla-inicio'?'flex':'none';sincronizarMusica();}
+$('btn-musica').onclick=()=>{musicaSilenciada=!musicaSilenciada;localStorage.setItem('maqanakuy-musica',musicaSilenciada?'off':'on');$('toggle-musica').checked=!musicaSilenciada;sincronizarMusica();};
+const modalConfig=$('modal-config'), modalPausa=$('modal-pausa');
+$('toggle-musica').checked=!musicaSilenciada;$('toggle-sfx').checked=sfxActivos;$('toggle-fx').checked=fxActivos;actualizarBotonMusica();
+function abrirConfig(desdePausa=false){configAbiertaDesdePausa=desdePausa;if(desdePausa){modalPausa.classList.remove('abierto');modalPausa.setAttribute('aria-hidden','true');}modalConfig.classList.add('abierto');modalConfig.setAttribute('aria-hidden','false');}
+function cerrarConfig(){modalConfig.classList.remove('abierto');modalConfig.setAttribute('aria-hidden','true');if(configAbiertaDesdePausa&&enBatalla){configAbiertaDesdePausa=false;modalPausa.classList.add('abierto');modalPausa.setAttribute('aria-hidden','false');}}
+$('btn-config').onclick=()=>abrirConfig(false);$('btn-cerrar-config').onclick=cerrarConfig;modalConfig.onclick=e=>{if(e.target===modalConfig)cerrarConfig();};
+$('toggle-musica').onchange=e=>{musicaSilenciada=!e.target.checked;localStorage.setItem('maqanakuy-musica',musicaSilenciada?'off':'on');sincronizarMusica();};
+$('toggle-sfx').onchange=e=>{sfxActivos=e.target.checked;localStorage.setItem('maqanakuy-sfx',sfxActivos?'on':'off');};
+$('toggle-fx').onchange=e=>{fxActivos=e.target.checked;localStorage.setItem('maqanakuy-fx',fxActivos?'on':'off');};
 
-const modalPausa = document.getElementById("modal-pausa");
-function mostrarPausa() {
-  if (!enBatalla || !ultimoEstado || ultimoEstado.finished) return;
-  juegoPausado = true;
-  teclasPresionadas.clear();
-  bloqueando = false;
-  socket.emit("pausar", { activo: true });
-  document.getElementById("pantalla-batalla").classList.add("pausada");
-  modalPausa.classList.add("abierto");
-  modalPausa.setAttribute("aria-hidden", "false");
-}
-function cerrarPausa() {
-  if (!enBatalla) return;
-  juegoPausado = false;
-  socket.emit("pausar", { activo: false });
-  document.getElementById("pantalla-batalla").classList.remove("pausada");
-  modalPausa.classList.remove("abierto");
-  modalPausa.setAttribute("aria-hidden", "true");
-}
-function alternarPausa() {
-  if (!enBatalla) return;
-  if (modalConfig.classList.contains("abierto")) {
-    modalConfig.classList.remove("abierto");
-    modalConfig.setAttribute("aria-hidden", "true");
-    if (configAbiertaDesdePausa) {
-      configAbiertaDesdePausa = false;
-      modalPausa.classList.add("abierto");
-      modalPausa.setAttribute("aria-hidden", "false");
-    }
-    return;
-  }
-  juegoPausado ? cerrarPausa() : mostrarPausa();
-}
-function salirDeBatalla() {
-  juegoPausado = false;
-  document.getElementById("pantalla-batalla").classList.remove("pausada");
-  modalPausa.classList.remove("abierto");
-  modalPausa.setAttribute("aria-hidden", "true");
-  volverMenu();
-}
-document.getElementById("btn-pausa-batalla").addEventListener("click", mostrarPausa);
-document.getElementById("btn-continuar").addEventListener("click", cerrarPausa);
-document.getElementById("btn-salir-batalla").addEventListener("click", salirDeBatalla);
-document.getElementById("btn-salir-pausa").addEventListener("click", salirDeBatalla);
-document.getElementById("btn-config-batalla").addEventListener("click", () => {
-  if (!juegoPausado) mostrarPausa();
-  modalPausa.classList.remove("abierto");
-  modalPausa.setAttribute("aria-hidden", "true");
-  configAbiertaDesdePausa = true;
-  modalConfig.classList.add("abierto");
-  modalConfig.setAttribute("aria-hidden", "false");
-});
-document.getElementById("btn-config-pausa").addEventListener("click", () => {
-  modalPausa.classList.remove("abierto");
-  modalPausa.setAttribute("aria-hidden", "true");
-  configAbiertaDesdePausa = true;
-  modalConfig.classList.add("abierto");
-  modalConfig.setAttribute("aria-hidden", "false");
-});
-
-// ---------- Audio sintetizado (sin archivos externos) ----------
-const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-
-function sonido({ freqInicial, freqFinal, duracion, tipo = "square", volumen = 0.2 }) {
-  if (!sfxActivos) return;
-  if (audioCtx.state === "suspended") audioCtx.resume();
-  const osc = audioCtx.createOscillator();
-  const gain = audioCtx.createGain();
-  osc.type = tipo;
-  osc.frequency.setValueAtTime(freqInicial, audioCtx.currentTime);
-  osc.frequency.exponentialRampToValueAtTime(Math.max(freqFinal, 1), audioCtx.currentTime + duracion);
-  gain.gain.setValueAtTime(volumen, audioCtx.currentTime);
-  gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + duracion);
-  osc.connect(gain).connect(audioCtx.destination);
-  osc.start();
-  osc.stop(audioCtx.currentTime + duracion);
-}
-
-const sonidos = {
-  golpe: () => sonido({ freqInicial: 180, freqFinal: 60, duracion: 0.12, tipo: "square", volumen: 0.25 }),
-  patada: () => sonido({ freqInicial: 260, freqFinal: 40, duracion: 0.18, tipo: "sawtooth", volumen: 0.25 }),
-  especial: () => {
-    sonido({ freqInicial: 500, freqFinal: 100, duracion: 0.3, tipo: "sawtooth", volumen: 0.3 });
-    setTimeout(() => sonido({ freqInicial: 700, freqFinal: 150, duracion: 0.25, tipo: "square", volumen: 0.2 }), 90);
-  },
-  bloqueo: () => sonido({ freqInicial: 900, freqFinal: 700, duracion: 0.08, tipo: "triangle", volumen: 0.15 }),
-  fallo: () => sonido({ freqInicial: 420, freqFinal: 180, duracion: 0.16, tipo: "sine", volumen: 0.09 }),
-  ko: () => {
-    sonido({ freqInicial: 120, freqFinal: 35, duracion: 0.7, tipo: "sawtooth", volumen: 0.32 });
-    setTimeout(() => sonido({ freqInicial: 70, freqFinal: 40, duracion: 0.45, tipo: "square", volumen: 0.2 }), 120);
-  },
-  salto: () => sonido({ freqInicial: 300, freqFinal: 500, duracion: 0.1, tipo: "sine", volumen: 0.12 }),
-  seleccion: () => sonido({ freqInicial: 400, freqFinal: 700, duracion: 0.1, tipo: "square", volumen: 0.15 }),
-  salaLista: () => {
-    [392, 523].forEach((f, i) =>
-      setTimeout(() => sonido({ freqInicial: f, freqFinal: f, duracion: 0.15, tipo: "triangle", volumen: 0.15 }), i * 110)
-    );
-  },
-  empezarPelea: () => {
-    sonido({ freqInicial: 150, freqFinal: 90, duracion: 0.25, tipo: "sawtooth", volumen: 0.28 });
-    setTimeout(() => sonido({ freqInicial: 700, freqFinal: 700, duracion: 0.35, tipo: "square", volumen: 0.25 }), 220);
-  },
-  victoria: () => {
-    [523, 659, 784, 1046].forEach((f, i) =>
-      setTimeout(() => sonido({ freqInicial: f, freqFinal: f, duracion: 0.2, tipo: "triangle", volumen: 0.2 }), i * 130)
-    );
-  },
-  derrota: () => sonido({ freqInicial: 300, freqFinal: 50, duracion: 0.6, tipo: "sawtooth", volumen: 0.2 })
+// ---------- Audio sintetizado ----------
+const AudioCtor=window.AudioContext||window.webkitAudioContext; const audioCtx=AudioCtor?new AudioCtor():null;
+function tono(a,b,d,tipo='square',vol=.16,delay=0){if(!sfxActivos||!audioCtx)return;const start=audioCtx.currentTime+delay;if(audioCtx.state==='suspended')audioCtx.resume();const o=audioCtx.createOscillator(),g=audioCtx.createGain();o.type=tipo;o.frequency.setValueAtTime(a,start);o.frequency.exponentialRampToValueAtTime(Math.max(1,b),start+d);g.gain.setValueAtTime(vol,start);g.gain.exponentialRampToValueAtTime(.001,start+d);o.connect(g).connect(audioCtx.destination);o.start(start);o.stop(start+d);}
+const sonidos={
+  golpe:()=>tono(190,65,.11,'square',.22),patada:()=>tono(270,45,.17,'sawtooth',.22),bloqueo:()=>tono(950,650,.09,'triangle',.15),salto:()=>tono(310,520,.1,'sine',.11),aterrizar:()=>tono(100,60,.08,'triangle',.09),dash:()=>tono(480,170,.1,'sine',.10),fallo:()=>tono(380,180,.12,'sine',.07),ko:()=>tono(130,38,.65,'sawtooth',.28),seleccion:()=>tono(420,700,.1,'square',.12),energia:()=>{tono(500,900,.12,'triangle',.13);tono(700,1100,.14,'triangle',.1,.08)},victoria:()=>[523,659,784,1046].forEach((f,i)=>tono(f,f,.18,'triangle',.15,i*.11)),derrota:()=>tono(300,50,.55,'sawtooth',.18),inicio:()=>{tono(150,90,.22,'sawtooth',.22);tono(700,700,.27,'square',.17,.18)},
+  especial:(char)=>{const base={coya:620,cuy:420,gallito:760,jaguar:310,oso:180,gato:850}[char]||500;tono(base,base*.45,.32,'sawtooth',.25);tono(base*1.4,base*.8,.24,'triangle',.14,.08)}
 };
 
-// ---------- Pantalla inicio: modos de juego ----------
-function nombreActual() { return document.getElementById("input-nombre").value.trim() || "Jugador"; }
-function prepararSalaVisual(titulo, texto) {
-  document.getElementById("titulo-sala").innerHTML = titulo;
-  document.getElementById("texto-sala").textContent = texto;
-}
-function iniciarSolo(mode) {
-  miNombre = nombreActual(); modoActual = mode;
-  socket.emit("crear_solo", { name: miNombre, mode }, (res) => {
-    if (!res.ok) return mostrarError(res.error);
-    salaActual = res.code; miId = socket.id; miIndex = 0;
-    prepararSalaVisual(mode === "story" ? "MODO HISTORIA" : "MODO LOCAL", mode === "story" ? "Elige tu luchador y supera a todos los rivales." : "Elige tu luchador para enfrentar a la máquina.");
-    document.getElementById("estado-espera").textContent = "";
-    document.getElementById("selector-personajes").style.display = "block";
-    mostrarError("");
-    mostrarPantalla("pantalla-sala");
-  });
-}
-document.getElementById("btn-historia").addEventListener("click", () => iniciarSolo("story"));
-document.getElementById("btn-local").addEventListener("click", () => iniciarSolo("local"));
-document.getElementById("btn-multijugador").addEventListener("click", () => { modoActual = "online"; mostrarPantalla("pantalla-online"); });
-document.getElementById("btn-crear").addEventListener("click", () => {
-  miNombre = nombreActual(); modoActual = "online";
-  socket.emit("crear_sala", { name: miNombre }, (res) => {
-    if (!res.ok) return mostrarError(res.error); salaActual=res.code; miId=socket.id; miIndex=0;
-    document.getElementById("codigo-sala").textContent=salaActual; prepararSalaVisual(`Sala: <span id="codigo-sala">${salaActual}</span>`, "Comparte este código con tu rival"); mostrarError(""); mostrarPantalla("pantalla-sala");
-  });
-});
-document.getElementById("btn-unirse").addEventListener("click", () => {
-  miNombre=nombreActual(); modoActual="online"; const codigo=document.getElementById("input-codigo").value.trim().toUpperCase(); if(!codigo)return mostrarError("Escribe un código de sala.");
-  socket.emit("unirse_sala", {name:miNombre,code:codigo}, (res)=>{ if(!res.ok)return mostrarError(res.error); salaActual=res.code; miId=socket.id; miIndex=1; prepararSalaVisual(`Sala: <span id="codigo-sala">${salaActual}</span>`, "Sala multijugador"); mostrarError(""); mostrarPantalla("pantalla-sala"); });
-});
-function volverMenu() {
-  if (salaActual) socket.emit("salir_sala"); juegoPausado=false; modalPausa.classList.remove("abierto"); document.getElementById("pantalla-batalla").classList.remove("pausada"); salaActual=null; modoActual=null; enBatalla=false; peleaAnunciada=false; ultimoEstado=null; document.getElementById("selector-personajes").style.display="none"; mostrarError(""); mostrarPantalla("pantalla-inicio");
-}
-document.querySelectorAll(".btn-volver").forEach(btn=>btn.addEventListener("click", volverMenu));
-document.getElementById("btn-menu-final").addEventListener("click", volverMenu);
+// ---------- Spritesheets ----------
+function visualState(p){if(!p)return'idle';if(p.hp<=0)return'ko';if(p.state==='attack'){if(p.currentAttack==='especial')return'special';if(p.currentAttack==='patada_fuerte')return'kick_heavy';if(p.currentAttack==='patada'||p.currentAttack==='barrido')return'kick_light';if(p.currentAttack==='golpe_fuerte')return'punch_heavy';return'punch_light';}return SPRITE_STATES[p.state]!==undefined?p.state:'idle';}
+function setSprite(el,charId,state,restart=false){const sprite=el.querySelector('.sprite'),c=CHARACTERS[charId];if(!sprite||!c)return;const prev=sprite.dataset.state;if(prev!==state||restart){sprite.dataset.state=state;sprite.dataset.started=String(performance.now());sprite.dataset.lastFrame='';}sprite.style.backgroundImage=`url(\"${c.sheet}\")`;const stableScale=SPRITE_SCALE[charId]?.__base||SPRITE_SCALE[charId]?.idle||1;sprite.style.setProperty('--sprite-scale',String(stableScale));el.dataset.character=charId;}
+const SPRITE_NODES=[$('luchador1')?.querySelector('.sprite'),$('luchador2')?.querySelector('.sprite')].filter(Boolean);
+function animarSprites(t){if(enBatalla){for(const sprite of SPRITE_NODES){const state=sprite.dataset.state||'idle',row=SPRITE_STATES[state]??0,start=Number(sprite.dataset.started||t),dur=STATE_DUR[state]||500,loop=['idle','walk','run','block_high','block_low','victory'].includes(state);const frame=loop?Math.floor((t-start)/(dur/4))%4:Math.min(3,Math.floor(Math.max(0,t-start)/dur*4));const key=`${row}:${frame}`;if(sprite.dataset.lastFrame!==key){sprite.dataset.lastFrame=key;const x=frame*(100/3),y=row*(100/21);sprite.style.backgroundPosition=`${x}% ${y}%`;}}}requestAnimationFrame(animarSprites);}requestAnimationFrame(animarSprites);
 
-function mostrarError(msg) {
-  const ids = ["mensaje-error", "mensaje-error-online"];
-  ids.forEach((id) => {
-    const el = document.getElementById(id);
-    if (el) el.textContent = msg || "";
-  });
+function setMotionTarget(playerId,x,serverTime=0,snap=false){
+  if(typeof x!=='number')return;
+  const t=performance.now();
+  let m=motion.get(playerId);
+  if(!m){m={renderX:x,targetX:x,lastTargetX:x,velocity:0,lastAt:t,lastRender:t};motion.set(playerId,m);return;}
+  const dt=Math.max(8,t-m.lastAt);
+  const rawVelocity=(x-m.targetX)/dt;
+  m.velocity=m.velocity*.58+rawVelocity*.42;
+  m.lastTargetX=m.targetX;m.targetX=x;m.lastAt=t;
+  if(snap||Math.abs(m.renderX-x)>24)m.renderX=x;
 }
-
-// ---------- Seleccion de personaje ----------
-function pintarSelectorPersonajes() {
-  const contenedor = document.getElementById("lista-personajes");
-  contenedor.innerHTML = "";
-  Object.entries(CHARACTERS).forEach(([id, c]) => {
-    const div = document.createElement("div");
-    div.className = "opcion-personaje";
-    div.dataset.id = id;
-    div.innerHTML = `<img class="icono" src="${c.poses.idle}" alt="${c.name}"><span class="nombre">${c.name}</span><small>${c.estilo}</small>`;
-    div.addEventListener("click", () => {
-      document.querySelectorAll(".opcion-personaje").forEach((o) => o.classList.remove("elegido"));
-      div.classList.add("elegido");
-      sonidos.seleccion();
-      socket.emit("elegir_personaje", { character: id });
+function syncMotionFromState(st,snap=false){
+  if(!st?.players)return;
+  st.players.forEach(p=>setMotionTarget(p.id,p.x,st.serverTime||0,snap));
+  for(const id of [...motion.keys()])if(!st.players.some(p=>p.id===id))motion.delete(id);
+}
+function interpolationLoop(t){
+  if(enBatalla&&ultimoEstado?.players){
+    ultimoEstado.players.forEach((p,idx)=>{
+      if(p.id===miPlayerKey&&!espectador)return;
+      const m=motion.get(p.id);if(!m)return;
+      const el=$(idx===0?'luchador1':'luchador2');if(!el)return;
+      const dt=Math.min(40,Math.max(1,t-(m.lastRender||t)));m.lastRender=t;
+      const predictionMs=Math.min(55,Math.max(0,pingActual*.22));
+      const predicted=Math.max(3,Math.min(97,m.targetX+m.velocity*predictionMs));
+      const smoothMs=modoActual==='online'?44:20;
+      const alpha=1-Math.exp(-dt/smoothMs);
+      m.renderX+= (predicted-m.renderX)*alpha;
+      if(Math.abs(predicted-m.renderX)<.025)m.renderX=predicted;
+      el.style.left=`${m.renderX}%`;
     });
-    contenedor.appendChild(div);
-  });
+  }
+  requestAnimationFrame(interpolationLoop);
 }
-pintarSelectorPersonajes();
+requestAnimationFrame(interpolationLoop);
+let perfLast=performance.now(),perfFrames=0,perfLow=false,perfGoodWindows=0;
+function performanceGuard(t){
+  perfFrames++;
+  const elapsed=t-perfLast;
+  if(elapsed>=1500){
+    const fps=perfFrames*1000/elapsed;
+    if(fps<43&&!perfLow){perfLow=true;perfGoodWindows=0;document.body.classList.add('performance-low');}
+    else if(perfLow&&fps>53){perfGoodWindows++;if(perfGoodWindows>=2){perfLow=false;perfGoodWindows=0;document.body.classList.remove('performance-low');}}
+    else if(perfLow)perfGoodWindows=0;
+    perfLast=t;perfFrames=0;
+  }
+  requestAnimationFrame(performanceGuard);
+}
+requestAnimationFrame(performanceGuard);
 
-const COOLDOWNS = { golpe: 420, patada: 850, especial: 2500 };
-const ataquesListosEn = { golpe: 0, patada: 0, especial: 0 };
-function lanzarAtaque(ataque) {
-  const ahora = performance.now();
-  if (!enBatalla || juegoPausado || bloqueando || ahora < ataquesListosEn[ataque]) return;
+// ---------- Pantallas / sala ----------
+function nombreActual(){const n=$('input-nombre').value.trim()||'Jugador';localStorage.setItem('maqanakuy-nombre',n);return n;}
+function mostrarError(msg=''){['mensaje-error','mensaje-error-online'].forEach(id=>{if($(id))$(id).textContent=msg;});}
+function guardarSala(){if(modoActual==='online'&&salaActual&&!espectador)localStorage.setItem('maqanakuy-room',JSON.stringify({code:salaActual,sessionToken}));}
+function limpiarSalaGuardada(){localStorage.removeItem('maqanakuy-room');}
+function entrarSala(res,mode,isSpectator=false){salaActual=res.code;modoActual=mode;miPlayerKey=res.playerKey||null;sessionToken=res.sessionToken||sessionToken;localStorage.setItem('maqanakuy-session',sessionToken);espectador=isSpectator;guardarSala();mostrarError('');mostrarPantalla('pantalla-sala');}
+function iniciarSolo(mode){const difficulty=$('select-dificultad')?.value||'medio';localStorage.setItem('maqanakuy-dificultad',difficulty);localStorage.setItem('maqanakuy-mapa',String(mapaMenuSeleccionado));socket.emit('crear_solo',{name:nombreActual(),mode,sessionToken,difficulty,stageIndex:mapaMenuSeleccionado},res=>{if(!res.ok)return mostrarError(res.error);entrarSala(res,mode,false);});}
+$('btn-historia').onclick=()=>iniciarSolo('story');$('btn-local').onclick=()=>iniciarSolo('local');$('btn-multijugador').onclick=()=>{modoActual='online';mostrarPantalla('pantalla-online');};
+$('btn-crear').onclick=()=>socket.emit('crear_sala',{name:nombreActual(),sessionToken,stageIndex:mapaMenuSeleccionado},res=>res.ok?entrarSala(res,'online',false):mostrarError(res.error));
+$('btn-unirse').onclick=()=>{const code=$('input-codigo').value.trim().toUpperCase();if(!code)return mostrarError('Escribe un código de sala.');socket.emit('unirse_sala',{name:nombreActual(),code,sessionToken},res=>res.ok?entrarSala(res,'online',false):mostrarError(res.error));};
+$('btn-espectar').onclick=()=>{const code=$('input-codigo').value.trim().toUpperCase();if(!code)return mostrarError('Escribe el código de la sala que quieres ver.');socket.emit('unirse_espectador',{code},res=>res.ok?entrarSala(res,'online',true):mostrarError(res.error));};
+function volverMenu(){if(salaActual)socket.emit('salir_sala');salaActual=null;miPlayerKey=null;miIndex=-1;modoActual=null;espectador=false;ultimoEstado=null;motion.clear();enBatalla=false;peleaAnunciada=false;juegoPausado=false;limpiarSalaGuardada();modalPausa.classList.remove('abierto');modalConfig.classList.remove('abierto');mostrarError('');mostrarPantalla('pantalla-inicio');}
+document.querySelectorAll('.btn-volver').forEach(b=>b.onclick=volverMenu);$('btn-menu-final').onclick=volverMenu;
 
-  ataquesListosEn[ataque] = ahora + COOLDOWNS[ataque];
-  enviarMovimiento(saltando ? "jump" : teclasPresionadas.has("s") ? "duck" : "idle");
-
-  // La respuesta visual del jugador es LOCAL e inmediata: no depende de la distancia
-  // al rival ni de la latencia con el servidor. El servidor decide por separado si
-  // ese ataque realmente alcanza al rival y, solo entonces, aplica daño.
-  animarAtaque(socket.id, ataque);
-  if (sonidos[ataque]) sonidos[ataque]();
-
-  socket.emit("atacar", { attack: ataque });
+function pintarSelectoresBase(){
+  $('lista-personajes').innerHTML='';Object.entries(CHARACTERS).forEach(([id,c])=>{const d=document.createElement('div');d.className='opcion-personaje';d.dataset.id=id;d.innerHTML=`<img class="icono" src="${c.icon}" alt="${c.name}"><span class="nombre">${c.name}</span><small>${c.estilo}</small>`;d.onclick=()=>{if(espectador||ultimoEstado?.started)return;sonidos.seleccion();socket.emit('elegir_personaje',{character:id});};$('lista-personajes').appendChild(d);});
+  $('lista-mapas').innerHTML='';STAGES.forEach((s,i)=>{const d=document.createElement('div');d.className='mapa-opcion';d.dataset.index=i;d.innerHTML=`<img src="${s.archivo}" alt="${s.nombre}"><span>${s.nombre}</span>`;d.onclick=()=>{if(espectador||ultimoEstado?.started||ultimoEstado?.hostKey!==miPlayerKey)return;socket.emit('elegir_mapa',{stageIndex:i});sonidos.seleccion();};$('lista-mapas').appendChild(d);});
+}pintarSelectoresBase();
+function renderLobby(st){
+  const online=st.mode==='online',yo=st.players.find(p=>p.id===miPlayerKey),rival=st.players.find(p=>p.id!==miPlayerKey);miIndex=st.players.findIndex(p=>p.id===miPlayerKey);
+  $('titulo-sala').textContent=online?`Sala: ${st.code}`:(st.mode==='story'?'MODO HISTORIA':'MODO LOCAL');
+  const diffLabel={facil:'Fácil',medio:'Medio',avanzado:'Avanzado'}[st.difficulty]||'Medio';
+  $('texto-sala').textContent=espectador?'Modo espectador':online?'Comparte este código con tu rival':`Elige tu luchador · Dificultad ${diffLabel}`;
+  $('espectadores-sala').textContent=`👁 ${st.spectators||0}`;
+  $('estado-espera').textContent=online&&st.players.length<2?'Esperando rival...':(online&&st.players.some(p=>!p.connected)?'Esperando reconexión del rival...':'');
+  const puedeElegir=!espectador && (!online||st.players.length>=1);$('selector-personajes').style.display=puedeElegir?'block':'none';
+  $('selector-mapas').style.display=online?'block':'none';$('aviso-host-mapa').textContent=st.hostKey===miPlayerKey?'· tú eliges':'· elegido por el anfitrión';
+  document.querySelectorAll('.mapa-opcion').forEach(el=>{el.classList.toggle('elegido',Number(el.dataset.index)===st.stageIndex);el.classList.toggle('bloqueado',st.hostKey!==miPlayerKey||espectador);});
+  document.querySelectorAll('.opcion-personaje').forEach(el=>{el.classList.toggle('elegido',yo?.character===el.dataset.id);el.classList.toggle('rival-elegido',!!rival?.character&&rival.character===el.dataset.id);});
 }
 
-window.addEventListener("keydown", (e) => {
-  if (e.key === "Escape") {
-    e.preventDefault();
-    alternarPausa();
-  }
+// ---------- Escenarios ----------
+function escenarioDe(st){const idx=(st.stageIndex??0)%STAGES.length;return STAGES[idx]||STAGES[0];}
+function aplicarEscenario(st){const s=escenarioDe(st),arena=$('arena');arena.style.backgroundImage=`linear-gradient(180deg,rgba(11,14,24,.08),rgba(12,14,25,.08)),url("${s.archivo}")`;$('nombre-mapa').textContent=s.nombre;arena.dataset.stage=String(st.stageIndex??0);sincronizarMusica();}
+
+// ---------- Pausa ----------
+function mostrarPausa(){if(!enBatalla||espectador||ultimoEstado?.finished)return;socket.emit('pausar',{activo:true});}
+function cerrarPausa(){if(!enBatalla||espectador)return;socket.emit('pausar',{activo:false});}
+function syncPausa(paused){juegoPausado=!!paused;$('pantalla-batalla').classList.toggle('pausada',juegoPausado);if(juegoPausado&&!modalConfig.classList.contains('abierto')){modalPausa.classList.add('abierto');modalPausa.setAttribute('aria-hidden','false');}else if(!juegoPausado){modalPausa.classList.remove('abierto');modalPausa.setAttribute('aria-hidden','true');}}
+function alternarPausa(){if(!enBatalla||espectador)return;if(modalConfig.classList.contains('abierto'))return cerrarConfig();juegoPausado?cerrarPausa():mostrarPausa();}
+$('btn-pausa-batalla').onclick=mostrarPausa;$('btn-continuar').onclick=cerrarPausa;$('btn-config-batalla').onclick=()=>{if(!juegoPausado)mostrarPausa();abrirConfig(true);};$('btn-config-pausa').onclick=()=>abrirConfig(true);$('btn-salir-batalla').onclick=volverMenu;$('btn-salir-pausa').onclick=volverMenu;
+
+// ---------- Controles / dash / ataques ----------
+const teclas=new Set(),lastTap={a:0,d:0},heldSince={a:0,d:0};let bloqueando=false;
+function miJugador(){return ultimoEstado?.players.find(p=>p.id===miPlayerKey)||null;}
+function puedeControlar(){const p=miJugador();return enBatalla&&!juegoPausado&&!espectador&&ultimoEstado?.roundActive&&p&&p.hp>0&&!['ko','knockdown','getup','hurt_high','hurt_low','recoil','defeat','intro','dodge'].includes(p.state);}
+function localAnimationForAttack(attack){const el=$(miIndex===0?'luchador1':'luchador2'),p=miJugador();if(!el||!p)return;const s=attack==='especial'?'special':attack==='patada_fuerte'?'kick_heavy':(attack==='patada'||attack==='barrido'?'kick_light':attack==='golpe_fuerte'?'punch_heavy':'punch_light');setSprite(el,p.character,s,true);localBusyUntil=performance.now()+Math.min(78,STATE_DUR[s]||78);}
+function lanzarAtaque(attack,uiType){if(!puedeControlar())return;const p=miJugador();if(attack==='especial'&&p.energy<SPECIAL_COST){mostrarImpacto($(miIndex===0?'luchador1':'luchador2'),'ENERGÍA INSUFICIENTE',true);sonidos.fallo();return;}const t=performance.now();if(t<localNextAttackAt)return;localNextAttackAt=t+(COOLDOWNS[attack]||120);localAnimationForAttack(attack);attack==='especial'?sonidos.especial(p.character):sonidos[uiType||attack]?.();socket.emit('atacar',{attack});}
+function detectarAtaque(k,shift=false){if(k==='j')return saltando?'aereo':(shift?'golpe_fuerte':'golpe');if(k==='k')return teclas.has('s')?'barrido':(shift?'patada_fuerte':'patada');if(k==='l')return'especial';return null;}
+function dispararAtaquePorTecla(k,shift=false){const atk=detectarAtaque(k,shift);if(atk)lanzarAtaque(atk,k==='j'?'golpe':k==='k'?'patada':'especial');}
+function iniciarRepeticionAtaque(k,shift=false){if(holdAttackTimers[k])return;const cada=k==='l'?320:(shift?(k==='j'?220:250):(k==='j'?115:130));holdAttackTimers[k]=setInterval(()=>{if(!enBatalla||juegoPausado||espectador)return;dispararAtaquePorTecla(k,shift);},cada);}
+function detenerRepeticionAtaque(k){if(holdAttackTimers[k]){clearInterval(holdAttackTimers[k]);delete holdAttackTimers[k];}}
+window.addEventListener('keydown',e=>{
+  const k=e.key.toLowerCase();if(k==='escape'){e.preventDefault();alternarPausa();return;}if(!enBatalla||juegoPausado||espectador)return;
+  if(['a','d','w','s','u','j','k','l'].includes(k))e.preventDefault();
+  if(['a','d'].includes(k)&&!e.repeat){const t=performance.now();if(t-lastTap[k]<170&&puedeControlar()){const dir=k==='a'?-1:1;socket.emit('dash',{direction:dir,seq:++movementSeq});miX=Math.max(3,Math.min(97,miX+dir*9));const el=$(miIndex===0?'luchador1':'luchador2'),p=miJugador();if(el&&p)setSprite(el,p.character,'dodge',true);localBusyUntil=t+100;sonidos.dash();crearParticula(el,'polvo');}lastTap[k]=t;heldSince[k]=t;}
+  if(['a','d','s'].includes(k))teclas.add(k);
+  if(k==='w'&&!saltando&&puedeControlar()){saltando=true;const el=$(miIndex===0?'luchador1':'luchador2'),p=miJugador();if(el&&p)setSprite(el,p.character,'jump',true);socket.emit('mover',{x:miX,estado:'jump',seq:++movementSeq});sonidos.salto();setTimeout(()=>{saltando=false;sonidos.aterrizar();crearParticula(el,'polvo');if(enBatalla&&!juegoPausado)socket.emit('mover',{x:miX,estado:teclas.has('s')?'crouch':'idle',seq:++movementSeq});},360);}
+  if(k==='u'&&!bloqueando&&puedeControlar()){const p=miJugador();if((p?.guard??100)<=0)return;bloqueando=true;const nivel=teclas.has('s')?'low':'high',el=$(miIndex===0?'luchador1':'luchador2');if(el&&p)setSprite(el,p.character,nivel==='low'?'block_low':'block_high',true);socket.emit('bloquear',{activo:true,nivel});}
+  if(['j','k','l'].includes(k)){ if(!e.repeat)dispararAtaquePorTecla(k,e.shiftKey); iniciarRepeticionAtaque(k,e.shiftKey); }
 });
+window.addEventListener('keyup',e=>{const k=e.key.toLowerCase();if(['a','d','s'].includes(k))teclas.delete(k);if(['j','k','l'].includes(k))detenerRepeticionAtaque(k);if(k==='u'&&bloqueando){bloqueando=false;socket.emit('bloquear',{activo:false});const el=$(miIndex===0?'luchador1':'luchador2'),p=miJugador();if(el&&p)setSprite(el,p.character,'idle');}if(k==='s'&&bloqueando)socket.emit('bloquear',{activo:true,nivel:'high'});});
+function movementLoop(t){const dt=Math.min(20,t-ultimoFrame);ultimoFrame=t;if(puedeControlar()&&!bloqueando){let moved=false,run=false;if(teclas.has('a')){run=t-heldSince.a>135;miX-=dt*.079*(run?1.52:1);moved=true;}if(teclas.has('d')){run=t-heldSince.d>135;miX+=dt*.079*(run?1.52:1);moved=true;}miX=Math.max(3,Math.min(97,miX));const state=saltando?'jump':teclas.has('s')?'crouch':moved?(run?'run':'walk'):'idle';if(t-ultimoEnvioMov>14){ultimoEnvioMov=t;socket.volatile.emit('mover',{x:miX,estado:state,seq:++movementSeq});}const el=$(miIndex===0?'luchador1':'luchador2'),p=miJugador();if(el){el.style.left=`${miX}%`;if(p&&t>=localBusyUntil&&p.hp>0)setSprite(el,p.character,state);}}
+  requestAnimationFrame(movementLoop);}requestAnimationFrame(movementLoop);
 
-// ---------- Controles de combate ----------
-const teclasPresionadas = new Set();
-let bloqueando = false;
-let enBatalla = false;
-let miX = 15; // posicion local (0-100), reconciliada con el servidor
-let saltando = false;
-let ultimoEstadoMovimiento = "idle";
-
-window.addEventListener("keydown", (e) => {
-  const k = e.key.toLowerCase();
-  if (!enBatalla || juegoPausado) return;
-  if (e.repeat && ["j", "k", "l", "u", "w"].includes(k)) return;
-
-  if (["a", "d", "w", "s"].includes(k)) {
-    teclasPresionadas.add(k);
-    e.preventDefault();
-  }
-
-  if (k === "w" && !saltando) {
-    saltando = true;
-    enviarMovimiento("jump");
-    setTimeout(() => {
-      saltando = false;
-      if (!teclasPresionadas.has("s")) enviarMovimiento("idle");
-    }, 430);
-    sonidos.salto();
-  }
-
-  if (k === "u" && !bloqueando) {
-    bloqueando = true;
-    socket.emit("bloquear", { activo: true });
-    sonidos.bloqueo();
-  }
-
-  if (k === "j") lanzarAtaque("golpe");
-  if (k === "k") lanzarAtaque("patada");
-  if (k === "l") lanzarAtaque("especial");
-});
-
-window.addEventListener("keyup", (e) => {
-  const k = e.key.toLowerCase();
-  if (["a", "d", "w", "s"].includes(k)) teclasPresionadas.delete(k);
-  if (juegoPausado) return;
-
-  if (k === "u" && bloqueando) {
-    bloqueando = false;
-    socket.emit("bloquear", { activo: false });
-  }
-
-  if (k === "s" && !teclasPresionadas.has("s") && !saltando) {
-    enviarMovimiento("idle");
-  }
-});
-
-// Bucle de movimiento local (izquierda/derecha) sincronizado por red
-const VELOCIDAD = 1.15; // movimiento más ágil
-let ultimoEnvioMov = 0;
-
-function bucleMovimiento() {
-  if (enBatalla && !juegoPausado) {
-    let cambio = false;
-    if (teclasPresionadas.has("a")) { miX = Math.max(3, miX - VELOCIDAD); cambio = true; }
-    if (teclasPresionadas.has("d")) { miX = Math.min(97, miX + VELOCIDAD); cambio = true; }
-
-    const ahora = performance.now();
-    if (cambio && ahora - ultimoEnvioMov > 36) {
-      ultimoEnvioMov = ahora;
-      let estado = "walk";
-      if (saltando) estado = "jump";
-      else if (teclasPresionadas.has("s")) estado = "duck";
-      enviarMovimiento(estado);
+// Táctil: respuesta inmediata; mantener puño/patada cambia a ataque fuerte repetido.
+for(const b of document.querySelectorAll('.controles-tactiles button')){
+  const key=b.dataset.tecla; let holdTimer=null,repeatTimer=null,longMode=false;
+  const down=e=>{
+    e.preventDefault();b.classList.add('presionado');longMode=false;
+    if(key==='j'||key==='k'){
+      lanzarAtaque(key==='j'?'golpe':'patada',key==='j'?'golpe':'patada');
+      holdTimer=setTimeout(()=>{longMode=true;const strong=key==='j'?'golpe_fuerte':'patada_fuerte';lanzarAtaque(strong,key==='j'?'golpe':'patada');repeatTimer=setInterval(()=>lanzarAtaque(strong,key==='j'?'golpe':'patada'),key==='j'?220:250);},220);
+      return;
     }
-    aplicarPosicionLocal();
-  }
-  requestAnimationFrame(bucleMovimiento);
-}
-requestAnimationFrame(bucleMovimiento);
-
-function actualizarRecargas() {
-  const ahora = performance.now();
-  document.querySelectorAll(".recarga").forEach((el) => {
-    const ataque = el.dataset.ataque;
-    const restante = Math.max(0, ataquesListosEn[ataque] - ahora);
-    const progreso = 1 - restante / COOLDOWNS[ataque];
-    el.style.setProperty("--listo", `${Math.max(0, progreso) * 100}%`);
-    el.classList.toggle("lista", restante <= 0);
-  });
-  requestAnimationFrame(actualizarRecargas);
-}
-requestAnimationFrame(actualizarRecargas);
-
-// Los controles táctiles solo se muestran en dispositivos sin teclado preciso.
-document.querySelectorAll(".controles-tactiles button").forEach((boton) => {
-  const tecla = boton.dataset.tecla;
-  const presionar = (e) => {
-    e.preventDefault();
-    window.dispatchEvent(new KeyboardEvent("keydown", { key: tecla }));
-    boton.classList.add("presionado");
+    window.dispatchEvent(new KeyboardEvent('keydown',{key}));
   };
-  const soltar = (e) => {
-    e.preventDefault();
-    window.dispatchEvent(new KeyboardEvent("keyup", { key: tecla }));
-    boton.classList.remove("presionado");
+  const up=e=>{
+    e.preventDefault();if(holdTimer){clearTimeout(holdTimer);holdTimer=null;}if(repeatTimer){clearInterval(repeatTimer);repeatTimer=null;}
+    if(key!=='j'&&key!=='k')window.dispatchEvent(new KeyboardEvent('keyup',{key}));
+    b.classList.remove('presionado');longMode=false;
   };
-  boton.addEventListener("pointerdown", presionar);
-  boton.addEventListener("pointerup", soltar);
-  boton.addEventListener("pointercancel", soltar);
-  boton.addEventListener("pointerleave", (e) => {
-    if (boton.classList.contains("presionado")) soltar(e);
-  });
+  b.addEventListener('pointerdown',down);b.addEventListener('pointerup',up);b.addEventListener('pointercancel',up);b.addEventListener('pointerleave',e=>{if(b.classList.contains('presionado'))up(e);});
+}
+function actualizarRecargas(){document.querySelectorAll('.recarga').forEach(el=>{el.style.setProperty('--listo','100%');el.classList.add('lista');});}actualizarRecargas();
+
+// ---------- Estado / HUD ----------
+function renderFighter(el,p,isMine,other){if(!p)return;const state=visualState(p);const localLock=isMine&&performance.now()<localBusyUntil&&!['hurt_high','hurt_low','recoil','knockdown','ko','defeat'].includes(p.state);if(!localLock)setSprite(el,p.character,state);el.classList.toggle('espejo',p.x>other.x);el.classList.toggle('energy-ready',p.energy>=SPECIAL_COST);if(!isMine||espectador)setMotionTarget(p.id,p.x,ultimoEstado?.serverTime||0);else if(Math.abs(miX-p.x)>14)miX+=(p.x-miX)*.08;}
+function renderBattle(st){aplicarEscenario(st);const[p1,p2]=st.players;if(!p1||!p2)return;miIndex=st.players.findIndex(p=>p.id===miPlayerKey);const hud1=$('hud-jugador1'),hud2=$('hud-jugador2');
+  [[hud1,p1],[hud2,p2]].forEach(([h,p])=>{h.querySelector('.nombre-jugador').textContent=p.name+(p.connected?'':' ⟳');h.querySelector('.victorias-jugador').textContent=`★ ${p.matchWins||0}  ${'●'.repeat(p.rounds||0)}`;h.querySelector('.vida-actual').style.width=`${Math.max(0,p.hp/p.maxHp*100)}%`;h.querySelector('.energia-actual').style.width=`${p.energy}%`;const g=h.querySelector('.guardia-actual');if(g)g.style.width=`${Math.max(0,(p.guard??100)/(p.maxGuard||100)*100)}%`;});
+  $('ronda-hud').textContent=`RONDA ${st.round||1}`;$('tiempo-hud').textContent=st.timeLeft??90;const mine=miJugador();$('estado-especial').textContent=espectador?'ESPECTADOR':`ENERGÍA ${mine?.energy??0}%`;
+  renderFighter($('luchador1'),p1,miPlayerKey===p1.id,p2);renderFighter($('luchador2'),p2,miPlayerKey===p2.id,p1);
+  $('btn-pausa-batalla').style.display=espectador?'none':'';$('btn-config-batalla').style.display=espectador?'none':'';syncPausa(st.paused);
+}
+function renderFinal(st){const mine=st.players.find(p=>p.id===miPlayerKey),rival=st.players.find(p=>p.id!==miPlayerKey);const gane=st.winner===miPlayerKey;
+  $('titulo-final').textContent=espectador?'FIN DEL COMBATE':(gane?'GANASTE':'PERDISTE');$('marcador-final').textContent=`${st.players[0]?.rounds||0} — ${st.players[1]?.rounds||0}`;
+  $('progreso-historia').textContent='';$('estado-revancha').textContent='';$('btn-revancha').style.display=espectador?'none':'';$('btn-revancha').dataset.accion='revancha';$('btn-revancha').textContent=st.mode==='online'?'Solicitar revancha':'Revancha';
+  if(st.mode==='story'&&!espectador){const complete=gane&&st.storyIndex>=st.storyTotal-1;$('progreso-historia').textContent=complete?'¡HISTORIA COMPLETADA!':`Rival ${st.storyIndex+1} de ${st.storyTotal}`;if(gane&&!complete){$('btn-revancha').dataset.accion='siguiente';$('btn-revancha').textContent='Siguiente rival';}}
+  if(st.mode==='online'&&!espectador){const voted=st.rematchVotes.includes(miPlayerKey);$('estado-revancha').textContent=st.rematchVotes.length?`Revancha: ${st.rematchVotes.length}/2 aceptada${st.rematchVotes.length>1?'s':''}`:'';if(voted)$('btn-revancha').textContent='Esperando al rival...';}
+  const s=mine?.stats||{};$('estadisticas-final').innerHTML=mine?`<div><strong>${s.hits||0}</strong><span>impactos</span></div><div><strong>${s.maxCombo||0}</strong><span>combo máximo</span></div><div><strong>${s.damage||0}</strong><span>daño</span></div><div><strong>${s.blocks||0}</strong><span>bloqueos</span></div><div><strong>${s.dodges||0}</strong><span>esquivas</span></div><div><strong>${s.dashes||0}</strong><span>dash</span></div>`:'';
+  if(!espectador)(gane?sonidos.victoria():sonidos.derrota());mostrarPantalla('pantalla-final');
+}
+socket.on('estado',st=>{const primera=!ultimoEstado||!ultimoEstado.started;ultimoEstado=st;syncMotionFromState(st,primera);modoActual=st.mode;miIndex=st.players.findIndex(p=>p.id===miPlayerKey);if(miIndex>=0&&!enBatalla)miX=st.players[miIndex].x;
+  if(!st.started){enBatalla=false;peleaAnunciada=false;syncPausa(false);renderLobby(st);mostrarPantalla('pantalla-sala');return;}
+  if(!peleaAnunciada&&!st.finished){peleaAnunciada=true;sonidos.inicio();if(miIndex>=0)miX=st.players[miIndex].x;}
+  if(st.finished){enBatalla=false;syncPausa(false);renderFinal(st);return;}
+  enBatalla=true;renderBattle(st);mostrarPantalla('pantalla-batalla');
 });
 
-function enviarMovimiento(estado) {
-  if (juegoPausado) return;
-  ultimoEstadoMovimiento = estado;
-  socket.emit("mover", { x: miX, estado });
-}
-
-function aplicarPosicionLocal() {
-  const elId = miIndex === 0 ? "luchador1" : "luchador2";
-  const el = document.getElementById(elId);
-  if (el) el.style.left = miX + "%";
-}
-
-function hashCadena(valor) {
-  return [...String(valor || "AM")].reduce((acc, ch) => acc + ch.charCodeAt(0), 0);
-}
-
-function obtenerEscenarioActual(estado) {
-  if (!estado) return STAGES[0];
-  if (estado.mode === "story") {
-    const indiceHistoria = Math.max(0, Math.min(Number(estado.storyIndex) || 0, STAGES.length - 1));
-    return STAGES[indiceHistoria];
-  }
-  const idx = hashCadena(salaActual || estado.mode || "local") % STAGES.length;
-  return STAGES[idx];
-}
-
-function aplicarEscenario(estado) {
-  const arena = document.getElementById("arena");
-  const nombreMapa = document.getElementById("nombre-mapa");
-  if (!arena || !nombreMapa) return;
-  const stage = obtenerEscenarioActual(estado);
-  arena.style.backgroundImage = `linear-gradient(180deg, rgba(12, 16, 28, 0.1), rgba(12, 18, 34, 0.1)), url("${stage.archivo}")`;
-  nombreMapa.textContent = stage.nombre;
-}
-
-// ---------- Estado del servidor ----------
-let ultimoEstado = null;
-const timersPose = {};
-let peleaAnunciada = false;
-
-socket.on("estado", (estado) => {
-  const yaEstabaEnBatalla = ultimoEstado && ultimoEstado.started && !ultimoEstado.finished;
-  ultimoEstado = estado;
-  if (typeof estado.paused === "boolean") juegoPausado = estado.paused;
-
-  if (!estado.started) {
-    enBatalla = false; modoActual = estado.mode || modoActual;
-    if (estado.mode === "online" && estado.players.length < 2) {
-      document.getElementById("estado-espera").textContent = "Esperando rival...";
-      document.getElementById("selector-personajes").style.display = "none";
-    } else {
-      document.getElementById("estado-espera").textContent = "";
-      if (document.getElementById("selector-personajes").style.display === "none") sonidos.salaLista();
-      document.getElementById("selector-personajes").style.display = "block";
-    }
-    mostrarPantalla("pantalla-sala"); peleaAnunciada = false; return;
-  }
-
-  if (!peleaAnunciada) {
-    peleaAnunciada = true;
-    sonidos.empezarPelea();
-    const yo = estado.players.find((p) => p.id === socket.id);
-    if (yo) miX = yo.x;
-  }
-
-  aplicarEscenario(estado);
-  enBatalla = true;
-  document.getElementById("pantalla-batalla").classList.toggle("pausada", !!estado.paused);
-  if (estado.paused && !modalConfig.classList.contains("abierto")) {
-    modalPausa.classList.add("abierto");
-    modalPausa.setAttribute("aria-hidden", "false");
-  } else if (!estado.paused) {
-    modalPausa.classList.remove("abierto");
-    modalPausa.setAttribute("aria-hidden", "true");
-  }
-
-  if (estado.finished) {
-    juegoPausado = false;
-    document.getElementById("pantalla-batalla").classList.remove("pausada");
-    modalPausa.classList.remove("abierto");
-    enBatalla = false;
-    const gane = estado.winner === socket.id;
-    document.getElementById("titulo-final").textContent = gane ? "GANASTE" : "Perdiste";
-    const yo = estado.players.find((p) => p.id === socket.id);
-    const rival = estado.players.find((p) => p.id !== socket.id);
-    document.getElementById("marcador-final").textContent = `${yo?.rounds || 0} — ${rival?.rounds || 0}`;
-    document.getElementById("estadisticas-final").innerHTML = yo ? `
-      <div><strong>${yo.stats.hits}</strong><span>impactos</span></div>
-      <div><strong>${yo.stats.maxCombo}</strong><span>combo máximo</span></div>
-      <div><strong>${yo.stats.damage}</strong><span>daño causado</span></div>
-      <div><strong>${yo.stats.blocks}</strong><span>bloqueos</span></div>` : "";
-    const progreso = document.getElementById("progreso-historia");
-    const btn = document.getElementById("btn-revancha");
-    progreso.textContent = ""; btn.dataset.accion = "revancha"; btn.textContent = "Revancha";
-    if (estado.mode === "story") {
-      const completado = gane && estado.storyIndex >= estado.storyTotal - 1;
-      progreso.textContent = completado ? "¡HISTORIA COMPLETADA! Derrotaste a todos los rivales." : `Rival ${estado.storyIndex + 1} de ${estado.storyTotal}`;
-      if (gane && !completado) { btn.dataset.accion = "siguiente"; btn.textContent = "Siguiente rival"; }
-    }
-    gane ? sonidos.victoria() : sonidos.derrota(); mostrarPantalla("pantalla-final"); return;
-  }
-
-  pintarBatalla(estado);
-  mostrarPantalla("pantalla-batalla");
+socket.on('movimiento_jugador',({playerId,x,state,serverTime,seq}={})=>{
+  if(!ultimoEstado||typeof x!=='number')return;
+  const p=ultimoEstado.players.find(v=>v.id===playerId);if(!p)return;
+  p.x=x;if(p.state!=='attack'&&['idle','walk','run','jump','crouch'].includes(state))p.state=state;
+  setMotionTarget(playerId,x,serverTime||0);
+  if(playerId===miPlayerKey&&!espectador&&Math.abs(miX-x)>18)miX+=(x-miX)*.12;
 });
 
-function setPoseLuchador(el, characterId, pose) {
-  const c = CHARACTERS[characterId];
-  if (!c) return;
-  const src = c.poses[pose] || c.poses.idle;
-  const img = el.querySelector("img");
-  if (img) {
-    if (img.dataset.pose !== pose) {
-      img.src = src;
-      img.dataset.pose = pose;
-    }
-  } else {
-    el.innerHTML = `<img src="${src}" alt="${c.name}">`;
-    el.querySelector("img").dataset.pose = pose;
-  }
-}
+// ---------- Eventos de combate ----------
+function fighterById(id){if(!ultimoEstado)return null;const idx=ultimoEstado.players.findIndex(p=>p.id===id);return idx===0?$('luchador1'):idx===1?$('luchador2'):null;}
+function crearParticula(el,tipo='chispa',extra=''){if(!fxActivos||!el)return;const capa=$('efectos-combate'),p=document.createElement('span');p.className=`particula ${tipo}${extra?' '+extra:''}`;p.style.left=el.style.left||'50%';p.style.top=tipo==='polvo'?'82%':'46%';capa.appendChild(p);setTimeout(()=>p.remove(),700);}
+function sacudir(fuerte=false){if(!fxActivos)return;const a=$('arena'),c=fuerte?'sacudida-fuerte':'sacudida';a.classList.remove(c);void a.offsetWidth;a.classList.add(c);setTimeout(()=>a.classList.remove(c),350);}
+function mostrarImpacto(el,texto,suave=false,combo=false){if(!el)return;const m=document.createElement('span');m.className=`impacto${suave?' suave':''}${combo?' combo-especial':''}`;m.textContent=texto;m.style.left=el.style.left||'50%';m.style.top='40%';$('efectos-combate').appendChild(m);setTimeout(()=>m.remove(),760);}
+socket.on('ataque_iniciado',({attackerId,attack,startup=0,active=100,recovery=0})=>{const p=ultimoEstado?.players.find(x=>x.id===attackerId);if(p){p.state='attack';p.currentAttack=attack;setTimeout(()=>{if(p.currentAttack===attack){p.currentAttack=null;if(p.state==='attack')p.state='idle';}},Math.max(100,startup+active+recovery)+35);}if(attackerId===miPlayerKey)return;const el=fighterById(attackerId);if(!el||!p)return;setSprite(el,p.character,attack==='especial'?'special':attack==='patada_fuerte'?'kick_heavy':(attack==='patada'||attack==='barrido'?'kick_light':attack==='golpe_fuerte'?'punch_heavy':'punch_light'),true);attack==='especial'?sonidos.especial(p.character):sonidos[(attack==='aereo'||attack==='golpe_fuerte')?'golpe':((attack==='patada_fuerte'||attack==='barrido')?'patada':attack)]?.();});
+socket.on('ataque_activo',({attackerId,attack,effect})=>{const el=fighterById(attackerId);if(attack==='especial'){el?.classList.add('especial-activo');crearParticula(el,'especial',effect||'');setTimeout(()=>el?.classList.remove('especial-activo'),450);}});
+socket.on('golpe',({targetId,attack,dmg,bloqueado,effect})=>{const el=fighterById(targetId);if(!el)return;if(bloqueado){sonidos.bloqueo();crearParticula(el,'bloqueo');mostrarImpacto(el,`BLOQUEO · -${dmg}`,true);}else{el.classList.add('hit-flash');setTimeout(()=>el.classList.remove('hit-flash'),130);crearParticula(el,attack==='especial'?'especial':'chispa',attack==='especial'?(effect||''):'');mostrarImpacto(el,`-${dmg}`);sacudir(attack==='especial'||dmg>=22);} });
+socket.on('ataque_fallido',({attackerId,reason})=>{if(attackerId!==miPlayerKey)return;if(reason==='esquiva'){mostrarImpacto(fighterById(attackerId),'ESQUIVADO',true);sonidos.fallo();}});
+socket.on('combo',({attackerId,count})=>{if(attackerId===miPlayerKey)$('estado-combo').textContent=`COMBO ×${count}`;setTimeout(()=>{$('estado-combo').textContent='LISTO';},850);});
+socket.on('combo_especial',({attackerId,name})=>{const el=fighterById(attackerId);mostrarImpacto(el,name,false,true);sonidos.energia();});
+socket.on('dash',({playerId})=>{crearParticula(fighterById(playerId),'polvo');});
+socket.on('energia_insuficiente',()=>{mostrarImpacto(fighterById(miPlayerKey),'ENERGÍA INSUFICIENTE',true);sonidos.fallo();});
+socket.on('guardia_rota',({playerId})=>{const el=fighterById(playerId);mostrarImpacto(el,'¡GUARDIA ROTA!',false,true);crearParticula(el,'bloqueo');tono(180,55,.28,'sawtooth',.20);if(playerId===miPlayerKey)bloqueando=false;});
+socket.on('aturdido',({playerId})=>{const el=fighterById(playerId);mostrarImpacto(el,'ATURDIDO',true);tono(420,120,.18,'triangle',.12);});
+socket.on('fin_ronda',({winnerId,round})=>{sonidos.ko();const a=$('anuncio-ronda');a.textContent=espectador?`FIN RONDA ${round}`:(winnerId===miPlayerKey?`RONDA ${round} GANADA`:`RONDA ${round} PERDIDA`);a.classList.add('visible');setTimeout(()=>a.classList.remove('visible'),1900);});
+socket.on('rival_desconectado',()=>{if(modoActual==='online'&&!espectador)$('estado-combo').textContent='RIVAL RECONECTANDO…';});
+socket.on('rival_reconectado',()=>{$('estado-combo').textContent='RIVAL RECONECTADO';setTimeout(()=>{$('estado-combo').textContent='LISTO';},1400);});
 
-function aplicarEstadoVisual(el, p, esMio) {
-  el.classList.toggle("saltando", p.estado === "jump" && p.hp > 0);
-  el.classList.toggle("agachado", p.estado === "duck" && p.hp > 0);
-  el.classList.toggle("bloqueando", !!p.blocking && p.hp > 0);
-  const temporalActivo = Number(el.dataset.poseHasta || 0) > performance.now();
-  if (!temporalActivo && p.hp > 0) {
-    let pose = "idle";
-    if (p.blocking) pose = "block";
-    else if (p.estado === "walk" || p.estado === "jump") pose = "walk";
-    setPoseLuchador(el, p.character, pose);
-  }
-  // La posicion de mi propio personaje la controla el bucle local (mas fluida);
-  // la del rival se sincroniza directo desde el servidor.
-  if (!esMio) el.style.left = p.x + "%";
-  else if (Math.abs(miX - p.x) > 5) miX += (p.x - miX) * 0.3;
-}
+$('btn-revancha').onclick=e=>{peleaAnunciada=false;if(e.currentTarget.dataset.accion==='siguiente')socket.emit('siguiente_historia');else socket.emit('solicitar_revancha');};
 
-function orientarLuchadores(l1, l2, p1, p2) {
-  // Los sprites miran a la derecha de origen; cada luchador sigue al rival.
-  l1.classList.toggle("espejo", p1.x > p2.x);
-  l2.classList.toggle("espejo", p2.x > p1.x);
-}
-
-function pintarBatalla(estado) {
-  aplicarEscenario(estado);
-  const [p1, p2] = estado.players;
-  if (!p1 || !p2) return;
-
-  const hud1 = document.getElementById("hud-jugador1");
-  const hud2 = document.getElementById("hud-jugador2");
-  hud1.querySelector(".nombre-jugador").textContent = p1.name;
-  hud2.querySelector(".nombre-jugador").textContent = p2.name;
-  hud1.querySelector(".vida-actual").style.width = `${p1.hp / p1.maxHp * 100}%`;
-  hud2.querySelector(".vida-actual").style.width = `${p2.hp / p2.maxHp * 100}%`;
-  hud1.querySelector(".nombre-jugador").dataset.rounds = "●".repeat(p1.rounds || 0);
-  hud2.querySelector(".nombre-jugador").dataset.rounds = "●".repeat(p2.rounds || 0);
-  document.getElementById("ronda-hud").textContent = `RONDA ${estado.round || 1}`;
-  document.getElementById("tiempo-hud").textContent = estado.timeLeft ?? 60;
-
-  const l1 = document.getElementById("luchador1");
-  const l2 = document.getElementById("luchador2");
-  l1.dataset.character = p1.character;
-  l2.dataset.character = p2.character;
-  orientarLuchadores(l1, l2, p1, p2);
-
-  if (p1.hp <= 0) {
-    setPoseLuchador(l1, p1.character, "ko");
-    l1.classList.add("ko");
-  } else {
-    l1.classList.remove("ko");
-    const img1 = l1.querySelector("img");
-    if (!img1 || img1.dataset.pose === "ko") setPoseLuchador(l1, p1.character, "idle");
-  }
-
-  if (p2.hp <= 0) {
-    setPoseLuchador(l2, p2.character, "ko");
-    l2.classList.add("ko");
-  } else {
-    l2.classList.remove("ko");
-    const img2 = l2.querySelector("img");
-    if (!img2 || img2.dataset.pose === "ko") setPoseLuchador(l2, p2.character, "idle");
-  }
-
-  aplicarEstadoVisual(l1, p1, miIndex === 0);
-  aplicarEstadoVisual(l2, p2, miIndex === 1);
-}
-
-
-function animarAtaque(attackerId, attack) {
-  const idsEnOrden = ultimoEstado ? ultimoEstado.players.map((p) => p.id) : [];
-  const elementos = [document.getElementById("luchador1"), document.getElementById("luchador2")];
-  const poseAtaque = POSE_POR_ATAQUE[attack] || "punch";
-  idsEnOrden.forEach((id, i) => {
-    if (id !== attackerId) return;
-    const el = elementos[i];
-    if (!el) return;
-    const characterId = el.dataset.character;
-    if (!characterId) return;
-    clearTimeout(timersPose[el.id + "-atk"]);
-    setPoseLuchador(el, characterId, poseAtaque);
-    el.dataset.poseHasta = String(performance.now() + 300);
-    el.classList.add("atacando", `ataque-${attack}`);
-    timersPose[el.id + "-atk"] = setTimeout(() => {
-      el.classList.remove("atacando", `ataque-${attack}`);
-      if (!el.classList.contains("ko")) setPoseLuchador(el, characterId, "idle");
-    }, 280);
-  });
-}
-
-socket.on("ataque_ejecutado", ({ attackerId, attack }) => {
-  // El atacante local ya mostró su animación instantáneamente en lanzarAtaque().
-  // Este evento sincroniza la misma animación para el otro jugador (o la IA).
-  if (attackerId === socket.id) return;
-  animarAtaque(attackerId, attack);
-  if (sonidos[attack]) sonidos[attack]();
-});
-
-socket.on("golpe", ({ attackerId, targetId, attack, dmg, bloqueado }) => {
-  if (bloqueado) setTimeout(() => sonidos.bloqueo(), 60);
-
-  const idsEnOrden = ultimoEstado ? ultimoEstado.players.map((p) => p.id) : [];
-  const elementos = [document.getElementById("luchador1"), document.getElementById("luchador2")];
-  const poseAtaque = POSE_POR_ATAQUE[attack] || "punch";
-
-  idsEnOrden.forEach((id, i) => {
-    const el = elementos[i];
-    if (!el) return;
-    const characterId = el.dataset.character;
-    if (!characterId) return;
-
-    if (id === targetId) {
-      clearTimeout(timersPose[el.id + "-hurt"]);
-      if (!el.classList.contains("ko") && !bloqueado) {
-        setPoseLuchador(el, characterId, "hurt");
-        el.dataset.poseHasta = String(performance.now() + 340);
-      }
-      if (!bloqueado) el.classList.add("golpeado");
-      mostrarImpacto(el, bloqueado ? `BLOQUEO · -${dmg}` : `-${dmg}`, bloqueado);
-      const arena = document.getElementById("arena");
-      if (!bloqueado && arena) {
-        arena.classList.remove("sacudida");
-        void arena.offsetWidth;
-        arena.classList.add("sacudida");
-      }
-      timersPose[el.id + "-hurt"] = setTimeout(() => {
-        el.classList.remove("golpeado");
-        if (!el.classList.contains("ko")) setPoseLuchador(el, characterId, "idle");
-      }, 320);
-    }
-  });
-});
-
-socket.on("ataque_fallido", ({ reason }) => {
-  sonidos.fallo();
-  // La animación del ataque ya se mostró. Si está fuera de alcance, simplemente no causa daño.
-  if (reason === "esquiva") {
-    const el = document.getElementById(miIndex === 0 ? "luchador1" : "luchador2");
-    mostrarImpacto(el, "ESQUIVADO", true);
-  }
-});
-
-socket.on("combo", ({ attackerId, count }) => {
-  if (attackerId !== socket.id || count < 2) return;
-  const yo = document.getElementById(miIndex === 0 ? "luchador1" : "luchador2");
-  mostrarImpacto(yo, `${count} GOLPES`, false);
-});
-
-socket.on("fin_ronda", ({ winnerId, round }) => {
-  sonidos.ko();
-  const anuncio = document.getElementById("anuncio-ronda");
-  anuncio.textContent = winnerId === socket.id ? `RONDA ${round} GANADA` : `RONDA ${round} PERDIDA`;
-  anuncio.classList.add("visible");
-  setTimeout(() => anuncio.classList.remove("visible"), 1900);
-});
-
-function mostrarImpacto(luchador, texto, suave = false) {
-  const capa = document.getElementById("efectos-combate");
-  const arena = document.getElementById("arena");
-  if (!capa || !arena || !luchador) return;
-  const marca = document.createElement("span");
-  marca.className = `impacto${suave ? " suave" : ""}`;
-  marca.textContent = texto;
-  marca.style.left = luchador.style.left || "50%";
-  marca.style.top = "38%";
-  capa.appendChild(marca);
-  setTimeout(() => marca.remove(), 620);
-}
-
-socket.on("rival_desconectado", () => {
-  alert("Tu rival se desconectó. Vuelves a la sala.");
-  peleaAnunciada = false;
-  enBatalla = false;
-  if (modoActual === "online") mostrarPantalla("pantalla-sala");
-});
-
-// ---------- Revancha ----------
-document.getElementById("btn-revancha").addEventListener("click", (e) => {
-  peleaAnunciada = false;
-  if (e.currentTarget.dataset.accion === "siguiente") socket.emit("siguiente_historia");
-  else socket.emit("revancha");
-});
+// ---------- Ping / reconexión ----------
+setInterval(()=>{const t=performance.now();socket.emit('ping_juego',()=>{pingActual=Math.round(performance.now()-t);$('ping-hud').textContent=`${pingActual} ms`;$('ping-sala').textContent=`${pingActual} ms`;});},2000);
+socket.on('connect',()=>{const raw=localStorage.getItem('maqanakuy-room');if(!raw)return;try{const saved=JSON.parse(raw);if(!saved.code||!saved.sessionToken)return;socket.emit('reconectar_sala',saved,res=>{if(!res.ok){limpiarSalaGuardada();return;}salaActual=res.code;miPlayerKey=res.playerKey;modoActual=res.mode||'online';sessionToken=saved.sessionToken;espectador=false;});}catch{limpiarSalaGuardada();}});

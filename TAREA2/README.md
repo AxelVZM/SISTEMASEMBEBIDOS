@@ -1,129 +1,138 @@
-# Andes Maqanakuy 2.0 — despliegue en tu EC2
+# ANDES MAQANAKUY — MENÚ Y MAPAS V8
 
-("Maqanakuy" = pelea/combate en quechua). Juego de pelea 1v1 en tiempo real (Node.js + Socket.io). Incluye rondas al mejor de tres, cronómetro, combos, alcance y altura de golpes, bloqueo, retroceso, estadísticas diferentes por luchador y controles de teclado o táctiles.
+Esta versión mantiene el balance V7 y añade selector de mapas desde el menú principal y una guía visual de controles.
 
-## Qué contiene esta carpeta
-- `server.js` → servidor (salas, rondas, cronómetro, hitboxes, combos y validación de movimiento)
-- `public/index.html`, `public/style.css`, `public/game.js` → lo que se ve en el navegador
-- `public/img/` → 42 sprites limpios (6 personajes × 7 poses), sin restos magenta o verde
-- `package.json` → dependencias (`express`, `socket.io`)
+- El mapa elegido se usa directamente en Modo Local.
+- En Historia es el escenario inicial y los siguientes rotan desde ese punto.
+- Al crear una sala online, el anfitrión comienza con ese mapa seleccionado y aún puede cambiarlo dentro de la sala.
+- Se incluyen controles de movimiento, salto, agacharse, bloqueo, golpe, patada, especial, ataque fuerte y dash.
 
-## Controles
-| Tecla | Acción |
-|---|---|
-| **A** / **D** | Moverse a la izquierda / derecha |
-| **W** | Saltar |
-| **S** | Agacharse |
-| **U** | Bloquear (mantener presionado — reduce el daño recibido ~75%) |
-| **J** | Golpe alto (se esquiva agachándose) |
-| **K** | Patada baja (se esquiva saltando) |
-| **L** | Especial |
+# ANDES MAQANAKUY — Netplay V5
 
-En computadora, los ataques se controlan solamente con teclado y las recargas aparecen como indicadores, no como botones. En celulares aparecen controles táctiles. Cada técnica tiene alcance, altura y retroceso propios.
+Juego de pelea 2D inspirado en Cusco y los Andes. Incluye Historia sin diálogos/mapa narrativo, Local contra IA y Multijugador por salas con Socket.IO.
+
+## Novedades de Netplay V5
+
+- Sprites renovados para Coya, Cuy, Gallito, Jaguar, Oso y Gato Andino manteniendo sus colores, vestimenta y rasgos principales.
+- Movimiento local con predicción inmediata: el personaje responde antes de esperar confirmación del servidor.
+- Movimiento remoto interpolado y con extrapolación leve según el ping para que el rival no avance a saltos.
+- Canal de red ligero para movimiento; el servidor ya no transmite el estado completo de la partida en cada pequeño paso.
+- Snapshots autoritativos de corrección cada 300 ms para evitar desincronización sin saturar la conexión.
+- Dash, salto, bloqueo y ataques con animación local inmediata.
+- Ataques sin cooldown visible. Existe solo una protección técnica mínima anti-flood en servidor.
+- Repetición fluida al mantener golpe/patada y controles táctiles con respuesta inmediata.
+- IA local actualizada con movimiento a 75 ms, bloqueo, esquiva, dash y decisiones separadas del movimiento.
+- Modo automático de rendimiento: si el navegador cae de FPS se reducen filtros/parallax costosos y se reactivan al recuperarse.
+- Reconexión rápida, ping visible, espectador y revancha sincronizada.
 
 ## Sistema de combate
-- Partidas al mejor de tres rondas, con 60 segundos por ronda.
-- Combos: encadena impactos dentro de 1.2 segundos para aumentar el daño.
-- Movimiento validado por el servidor para limitar teletransportes y trampas.
-- Cada personaje tiene vida, velocidad, potencia, defensa, alcance y especial propios.
-- Al terminar se muestran impactos, combo máximo, daño causado y bloqueos.
 
-## Música ambiental
-La música se carga de forma invisible e intenta comenzar al entrar al sitio. Algunos navegadores impiden el sonido antes de la primera interacción; en ese caso se activa automáticamente con el primer clic o tecla, sin mostrar controles ni avisos.
+- Máquina de estados.
+- Hitboxes/hurtboxes.
+- Golpes ligeros/fuertes, barrido y ataque aéreo.
+- Combos.
+- Energía 0–100 y especial desde 50.
+- Especial único por personaje.
+- Dash/esquiva.
+- Bloqueo alto/bajo.
+- Partículas, cámara y efectos configurables.
+- Música de menú y música por escenario.
+- Escenarios del Cusco con parallax.
 
-## 0. Pruébalo primero en tu computadora (antes de tocar AWS)
-Así lo revisas tú misma sin depender del servidor ni del Security Group:
+## Controles
+
+- A / D: movimiento.
+- W: salto.
+- S: agacharse.
+- U: bloquear; S + U: bloqueo bajo.
+- J: golpe.
+- K: patada.
+- L: especial.
+- Shift + J: golpe fuerte.
+- Shift + K: patada fuerte.
+- Doble A / D: dash.
+- ESC: pausa.
+
+Las letras de control no aparecen impresas en la interfaz de batalla.
+
+## Ejecutar localmente
 
 ```bash
-cd andes-maqanakuy
 npm install
-node server.js
+npm start
 ```
-Verás: `Servidor de Andes Maqanakuy corriendo en el puerto 3000`
 
-Abre **dos pestañas** (o una normal + una de incógnito) en:
-```
+Abrir:
+
+```text
 http://localhost:3000
 ```
-- En la pestaña 1: pon un nombre → "Crear sala" → copia el código de 4 letras
-- En la pestaña 2: pon otro nombre → pega el código → "Unirse a sala"
-- Confirma que la música empiece al entrar o, si el navegador bloquea el autoplay, después del primer clic
-- Ambas eligen personaje (cuando las dos eligen, empieza la pelea automáticamente y la pantalla pasa a modo pantalla completa)
-- Haz clic **dentro de la arena** de cada pestaña (para que el navegador entregue el foco de teclado a esa ventana) y prueba:
-  - **A/D** en cada pestaña — el personaje correspondiente debe moverse y el rival debe verlo moverse en la otra pestaña
-  - **W** (salto) y **S** (agachar) — deben verse ambos gestos
-  - **U** mantenido — debe sonar el bloqueo y reducir el daño que recibe ese jugador
-  - **J / K / L** — deben sonar los golpes, cambiar la pose (puñete/patada) y el rival debe pasar a la pose de "golpeado"
-  - al llegar a 0 de vida aparece la pose de KO real (tirado en el suelo) y la pantalla de "Ganaste/Perdiste"
-  - el botón "Revancha" reinicia vida y posición de ambos
 
-Para detener el servidor local: `Ctrl + C` en la terminal.
+## Verificar versión
 
-Cuando ya te guste cómo se ve/juega, sigue con los pasos de abajo para subirlo al EC2.
-
-## 1. Sube la carpeta a tu EC2
-Desde tu computadora (reemplaza `tu-llave.pem` y la IP):
 ```bash
-scp -i tu-llave.pem -r andes-maqanakuy ubuntu@TU_IP_PUBLICA:/home/ubuntu/
-```
-(usa `ec2-user@` en vez de `ubuntu@` si tu instancia es Amazon Linux)
-
-## 2. Conéctate por SSH e instala Node.js (si no lo tienes)
-```bash
-ssh -i tu-llave.pem ubuntu@TU_IP_PUBLICA
-
-# Instalar Node.js 20 (Ubuntu):
-curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
-sudo apt-get install -y nodejs
+curl http://127.0.0.1:3000/healthz
 ```
 
-## 3. Instala dependencias y corre el servidor
+Debe devolver:
+
+```json
+{"ok":true,"app":"andes-maqanakuy","version":"netplay-v5"}
+```
+
+## AWS
+
+Consulta `DEPLOY_AWS.md`. Se mantienen `ecosystem.config.cjs` para PM2 y la configuración de Nginx + WebSocket.
+
+Para actualizar tu EC2 después de subir esta versión a GitHub:
+
 ```bash
-cd /home/ubuntu/andes-maqanakuy
+cd ~/SISTEMASEMBEBIDOS/TAREA2
+git pull origin main
 npm install
-node server.js
-```
-Deberías ver: `Servidor de Andes Maqanakuy corriendo en el puerto 3000`
-
-## 4. Abre el puerto en el Security Group de tu EC2
-En la consola de AWS → EC2 → tu instancia → pestaña "Security" → Security Group → Edit inbound rules → Add rule:
-- Type: Custom TCP
-- Port: 3000
-- Source: 0.0.0.0/0 (o restringido si prefieres)
-
-## 5. Entra desde el navegador
-```
-http://TU_IP_PUBLICA:3000
-```
-Un jugador crea sala (le da un código de 4 letras), el otro se une con ese código desde otra pestaña, celular o computadora.
-
-## 6. (Recomendado) Que el servidor no se caiga al cerrar la terminal SSH
-```bash
-sudo npm install -g pm2
-pm2 start server.js --name andes-maqanakuy
+pm2 restart andes-maqanakuy
 pm2 save
-pm2 startup   # sigue las instrucciones que te muestre
 ```
 
-## Qué necesito de ti para mejorarlo (opcional)
-No necesito nada más para que funcione. Si quieres subir el nivel:
-- Si quieres audio real (grabado) en vez de sintetizado, archivos .mp3/.wav cortos de golpe/patada/especial.
-- Si quieres HTTPS (candado verde) en vez de solo http://IP:3000, dime si tienes un dominio apuntando a la IP del servidor.
-- Si tienes hojas de sprites con más cuadros por pose, puedo usarlas para animaciones más fluidas.
-- Si quieres otra canción de fondo, pásame el link de YouTube y la cambio.
+Consulta `CHANGELOG_NETPLAY_V5.md` para el detalle técnico.
 
-## Modos de juego (v2.1)
-- Historia: combate consecutivo contra los 6 personajes controlados por IA.
-- Local: combate contra un rival controlado por IA.
-- Multijugador: crear o unirse a una sala online.
-- Música: control desde la pantalla principal y pausa automática al entrar en batalla.
-- Configuración: activar/desactivar música de menú y efectos de sonido.
+## Gameplay V6
 
-## Corrección de combate AWS RANGO V2
+Esta versión corrige la visualización de personajes y añade dificultad para los modos con IA.
 
-- El ataque se anima inmediatamente en el cliente al presionar la tecla, incluso si el rival está lejos.
-- La distancia NO impide ejecutar la animación.
-- El servidor aplica daño únicamente si `distancia <= rango del ataque + alcance del personaje`.
-- Si está fuera de rango: no hay daño, no hay retroceso y cuenta como fallo.
-- Si está dentro de rango pero esquiva por postura: no hay daño y se muestra `ESQUIVADO`.
-- Los recursos `game.js` y `style.css` usan `?v=aws-rango-v2` para evitar que el navegador conserve la versión anterior en caché.
+### Probar localmente
+
+```powershell
+npm install
+$env:PORT=3100
+npm start
+```
+
+Abrir: `http://127.0.0.1:3100/?v=balance-v7`
+
+Verificación: `http://127.0.0.1:3100/healthz` debe mostrar `balance-v7`.
+
+### Dificultad
+
+- Fácil: reacción más lenta, menos bloqueo/esquiva y ataques principalmente básicos.
+- Medio: equilibrio general.
+- Avanzado: reacción rápida, mejor control de distancia, bloqueos, esquivas, dash, fuertes y especiales más frecuentes.
+
+
+## V6.1 - Ajuste IA y proporción de personajes
+- IA Fácil, Medio y Avanzado ligeramente menos agresiva.
+- Menos bloqueos/esquivas/dash y una reacción un poco más humana.
+- Corregida la relación de aspecto de los frames: 160x240 (2:3).
+- Los personajes ya no se ensanchan horizontalmente.
+
+
+## Balance V7
+
+- Vida aumentada y daño reducido para que las peleas duren más.
+- Rondas de 90 segundos.
+- Anti-spam corto entre ataques, sin volver lentos los controles.
+- Especiales cuestan 70 de energía.
+- Barra de guardia con ruptura y regeneración.
+- Stun breve al cuarto impacto de un combo largo.
+- Knockback mayor para separar luchadores.
+- IA con más pausas entre ataques en Fácil, Medio y Avanzado.

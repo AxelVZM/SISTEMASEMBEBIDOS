@@ -1,0 +1,32 @@
+{
+  "frameWidth": 160,
+  "frameHeight": 240,
+  "cols": 4,
+  "rows": 22,
+  "states": {
+    "idle": 0,
+    "walk": 1,
+    "run": 2,
+    "jump": 3,
+    "crouch": 4,
+    "block_high": 5,
+    "block_low": 6,
+    "punch_light": 7,
+    "punch_heavy": 8,
+    "kick_light": 9,
+    "kick_heavy": 10,
+    "special": 11,
+    "hurt_high": 12,
+    "hurt_low": 13,
+    "recoil": 14,
+    "dodge": 15,
+    "knockdown": 16,
+    "getup": 17,
+    "ko": 18,
+    "victory": 19,
+    "defeat": 20,
+    "intro": 21
+  },
+  "framesPerState": 4,
+  "optimization": "smooth-sprites-v2: normalized render scales + reduced GPU texture size"
+}

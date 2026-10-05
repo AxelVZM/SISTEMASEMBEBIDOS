@@ -4,7 +4,7 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>Andes Maqanakuy</title>
-<link rel="stylesheet" href="style.css?v=aws-rango-v2" />
+<link rel="stylesheet" href="style.css?v=menu-mapas-v8" />
 </head>
 <body>
 <iframe id="musica-frame" class="musica-oculta" src="https://www.youtube.com/embed/khGumqLho7w?autoplay=1&loop=1&playlist=khGumqLho7w&controls=0&rel=0&enablejsapi=1" title="Música ambiental" allow="autoplay; encrypted-media" aria-hidden="true" tabindex="-1"></iframe>
@@ -13,104 +13,142 @@
   <button id="btn-musica" class="boton-icono" aria-label="Silenciar música" title="Silenciar música">🔊</button>
   <button id="btn-config" class="boton-icono" aria-label="Configuración" title="Configuración">⚙️</button>
 </div>
+<div id="info-musica-actual" class="info-musica-actual">♪ Tema del menú</div>
 
-<div id="pantalla-inicio" class="pantalla activa">
+<section id="pantalla-inicio" class="pantalla activa inicio-amplio">
   <div class="portada-juego">
     <img src="assets/ui/portada-principal.png" alt="Personajes de Andes Maqanakuy" class="portada-img" />
     <div class="portada-capa"></div>
-    <div class="portada-texto">
-      <h1>ANDES MAQANAKUY</h1>
-      <p class="subtitulo">Duelo 1v1 con las bestias del Ande</p>
+    <div class="portada-texto"><h1>ANDES MAQANAKUY</h1><p class="subtitulo">Combate 2D inspirado en el Cusco y los Andes</p></div>
+  </div>
+  <div class="tarjeta modos">
+    <input id="input-nombre" type="text" placeholder="Tu nombre" maxlength="16" autocomplete="nickname" />
+    <label class="selector-dificultad"><span>Dificultad contra IA</span><select id="select-dificultad"><option value="facil">Fácil</option><option value="medio" selected>Medio</option><option value="avanzado">Avanzado</option></select></label>
+
+    <div class="bloque-menu bloque-mapas-menu">
+      <div class="titulo-bloque-menu"><div><b>🗺️ ELIGE ESCENARIO</b><span>Se usa en Local, como escenario inicial en Historia y como mapa inicial al crear una sala.</span></div><span id="mapa-menu-nombre" class="chip-seleccion">Machu Picchu</span></div>
+      <div id="menu-lista-mapas" class="menu-lista-mapas" aria-label="Escenarios disponibles"></div>
     </div>
+
+    <button id="btn-historia" class="modo-btn"><b>📖 MODO HISTORIA</b><span>Supera a todos los rivales, uno por uno.</span></button>
+    <button id="btn-local" class="modo-btn"><b>🤖 MODO LOCAL</b><span>Pelea contra una IA mejorada.</span></button>
+    <button id="btn-multijugador" class="modo-btn"><b>🌐 MULTIJUGADOR</b><span>Sala privada, espectador, escenario y revancha sincronizada.</span></button>
   </div>
 
-  <div class="tarjeta modos">
-    <input id="input-nombre" type="text" placeholder="Tu nombre" maxlength="16" />
-    <button id="btn-historia" class="modo-btn"><b>📖 MODO HISTORIA</b><span>Enfrenta a todos los personajes, uno por uno.</span></button>
-    <button id="btn-local" class="modo-btn"><b>🤖 MODO LOCAL</b><span>Pelea contra la máquina.</span></button>
-    <button id="btn-multijugador" class="modo-btn"><b>🌐 MULTIJUGADOR</b><span>Crea una sala o únete a un rival.</span></button>
+  <div class="tarjeta controles-menu">
+    <div class="titulo-bloque-menu"><div><b>🎮 CONTROLES</b><span>Combinaciones rápidas para combate.</span></div></div>
+    <div class="rejilla-controles-menu">
+      <div class="control-menu"><span class="teclas"><kbd>A</kbd><kbd>D</kbd></span><span>Mover</span></div>
+      <div class="control-menu"><span class="teclas"><kbd>W</kbd></span><span>Saltar</span></div>
+      <div class="control-menu"><span class="teclas"><kbd>S</kbd></span><span>Agacharse</span></div>
+      <div class="control-menu"><span class="teclas"><kbd>U</kbd></span><span>Bloquear</span></div>
+      <div class="control-menu"><span class="teclas"><kbd>J</kbd></span><span>Golpe</span></div>
+      <div class="control-menu"><span class="teclas"><kbd>K</kbd></span><span>Patada</span></div>
+      <div class="control-menu"><span class="teclas"><kbd>L</kbd></span><span>Especial</span></div>
+      <div class="control-menu"><span class="teclas"><kbd>Shift</kbd><b>+</b><kbd>J/K</kbd></span><span>Ataque fuerte</span></div>
+      <div class="control-menu"><span class="teclas"><kbd>A</kbd><kbd>A</kbd> / <kbd>D</kbd><kbd>D</kbd></span><span>Dash</span></div>
+    </div>
+    <p class="nota-controles-menu">Consejo: bloquea para gastar guardia del rival y usa los ataques fuertes cuando tengas espacio.</p>
   </div>
   <p id="mensaje-error" class="error"></p>
-</div>
+</section>
 
-<div id="pantalla-online" class="pantalla">
+<section id="pantalla-online" class="pantalla">
   <h2>MULTIJUGADOR</h2>
   <div class="tarjeta">
-    <p class="subtexto-panel">Comparte el código generado o únete con uno existente.</p>
-    <button id="btn-crear">Crear sala</button>
+    <p class="subtexto-panel">Crea una sala, únete o entra como espectador.</p>
+    <button id="btn-crear">Crear sala privada</button>
     <div class="separador">— o —</div>
     <input id="input-codigo" type="text" placeholder="Código de sala" maxlength="4" style="text-transform:uppercase" />
-    <button id="btn-unirse">Unirse a sala</button>
+    <div class="acciones-online">
+      <button id="btn-unirse">Unirse a sala</button>
+      <button id="btn-espectar" class="secundario">👁 Espectar</button>
+    </div>
     <p id="mensaje-error-online" class="error"></p>
     <button class="secundario btn-volver">← Volver</button>
   </div>
-</div>
+</section>
 
-<div id="pantalla-sala" class="pantalla">
-  <h2 id="titulo-sala">Sala: <span id="codigo-sala"></span></h2>
-  <p id="texto-sala">Comparte este código con tu rival</p>
+<section id="pantalla-sala" class="pantalla sala-amplia">
+  <div class="cabecera-sala">
+    <div><h2 id="titulo-sala">Sala</h2><p id="texto-sala"></p></div>
+    <div class="estado-red"><span id="ping-sala">-- ms</span><span id="espectadores-sala">👁 0</span></div>
+  </div>
   <p id="estado-espera">Esperando rival...</p>
+
+  <div id="selector-mapas" class="selector-mapas" style="display:none">
+    <p>Escenario <small id="aviso-host-mapa"></small></p>
+    <div id="lista-mapas" class="lista-mapas"></div>
+  </div>
+
   <div id="selector-personajes" class="grid-personajes" style="display:none">
     <p>Elige tu luchador:</p>
     <div id="lista-personajes" class="lista-personajes"></div>
   </div>
   <button class="secundario btn-volver" id="btn-volver-sala">← Menú principal</button>
-</div>
+</section>
 
-<div id="pantalla-batalla" class="pantalla">
+<section id="pantalla-batalla" class="pantalla">
   <div class="acciones-batalla">
     <button id="btn-pausa-batalla" class="boton-icono batalla-icono" aria-label="Pausar" title="Pausar">⏸</button>
     <button id="btn-config-batalla" class="boton-icono batalla-icono" aria-label="Configuración" title="Configuración">⚙️</button>
-    <button id="btn-salir-batalla" class="boton-icono batalla-icono peligro" aria-label="Salir de la batalla" title="Salir de la batalla">✕</button>
+    <button id="btn-salir-batalla" class="boton-icono batalla-icono peligro" aria-label="Salir" title="Salir">✕</button>
   </div>
+
   <div class="hud">
-    <div class="jugador-hud" id="hud-jugador1"><div class="nombre-jugador"></div><div class="barra-vida"><div class="vida-actual"></div></div></div>
-    <div class="centro-hud"><div id="ronda-hud">RONDA 1</div><div class="vs">VS</div><div id="tiempo-hud">60</div></div>
-    <div class="jugador-hud" id="hud-jugador2"><div class="nombre-jugador"></div><div class="barra-vida"><div class="vida-actual"></div></div></div>
+    <div class="jugador-hud" id="hud-jugador1">
+      <div class="linea-nombre"><span class="nombre-jugador"></span><span class="victorias-jugador"></span></div>
+      <div class="barra-vida"><div class="vida-actual"></div></div>
+      <div class="barra-energia" title="Energía"><div class="energia-actual"></div></div>
+      <div class="barra-guardia" title="Guardia"><div class="guardia-actual"></div></div>
+    </div>
+    <div class="centro-hud"><div id="ronda-hud">RONDA 1</div><div class="vs">VS</div><div id="tiempo-hud">90</div><div id="ping-hud">-- ms</div></div>
+    <div class="jugador-hud" id="hud-jugador2">
+      <div class="linea-nombre"><span class="nombre-jugador"></span><span class="victorias-jugador"></span></div>
+      <div class="barra-vida"><div class="vida-actual"></div></div>
+      <div class="barra-energia" title="Energía"><div class="energia-actual"></div></div>
+      <div class="barra-guardia" title="Guardia"><div class="guardia-actual"></div></div>
+    </div>
   </div>
+
   <div class="arena" id="arena">
-    <div class="cordillera cordillera-lejana"></div><div class="cordillera cordillera-cercana"></div>
+    <div class="parallax capa-cielo"></div>
+    <div class="parallax capa-niebla"></div>
+    <div class="parallax capa-luz"></div>
+    <div class="parallax capa-frente"></div>
     <div class="nombre-mapa" id="nombre-mapa"></div>
-    <div id="efectos-combate" aria-live="polite"></div><div id="anuncio-ronda" aria-live="assertive"></div>
-    <div class="luchador" id="luchador1"></div><div class="luchador" id="luchador2"></div>
+    <div id="efectos-combate" aria-live="polite"></div>
+    <div id="anuncio-ronda" aria-live="assertive"></div>
+    <div class="luchador" id="luchador1"><div class="sprite"></div><div class="sombra-luchador"></div></div>
+    <div class="luchador" id="luchador2"><div class="sprite"></div><div class="sombra-luchador"></div></div>
   </div>
+
   <div class="pie-batalla">
-    <div class="recargas" aria-label="Disponibilidad de ataques">
+    <div class="estado-combate"><span id="estado-combo">LISTO</span><span id="estado-especial">ENERGÍA 0%</span></div>
+    <div class="recargas" aria-label="Ataques">
       <div class="recarga" data-ataque="golpe"><span>Golpe</span><i></i></div>
       <div class="recarga" data-ataque="patada"><span>Patada</span><i></i></div>
       <div class="recarga especial" data-ataque="especial"><span>Especial</span><i></i></div>
     </div>
-    <div class="controles-tactiles" aria-label="Controles táctiles"><div class="grupo-movimiento"><button data-tecla="a" aria-label="Izquierda">◀</button><button data-tecla="w" aria-label="Saltar">▲</button><button data-tecla="s" aria-label="Agacharse">▼</button><button data-tecla="d" aria-label="Derecha">▶</button></div><div class="grupo-ataque"><button data-tecla="u" aria-label="Defender">🛡️</button><button data-tecla="j" aria-label="Golpe">👊</button><button data-tecla="k" aria-label="Patada">🦶</button><button data-tecla="l" aria-label="Especial">✦</button></div></div>
+    <div class="controles-tactiles" aria-label="Controles táctiles">
+      <div class="grupo-movimiento"><button data-tecla="a" aria-label="Izquierda">◀</button><button data-tecla="w" aria-label="Saltar">▲</button><button data-tecla="s" aria-label="Agacharse">▼</button><button data-tecla="d" aria-label="Derecha">▶</button></div>
+      <div class="grupo-ataque"><button data-tecla="u" aria-label="Defender">🛡️</button><button data-tecla="j" aria-label="Golpe">👊</button><button data-tecla="k" aria-label="Patada">🦶</button><button data-tecla="l" aria-label="Especial">✦</button></div>
+    </div>
   </div>
-</div>
+</section>
 
-<div id="pantalla-final" class="pantalla">
-  <h2 id="titulo-final"></h2><p id="marcador-final"></p><p id="progreso-historia"></p>
+<section id="pantalla-final" class="pantalla">
+  <h2 id="titulo-final"></h2><p id="marcador-final"></p><p id="progreso-historia"></p><p id="estado-revancha"></p>
   <div id="estadisticas-final" class="estadisticas-final"></div>
-  <button id="btn-revancha">Revancha</button>
+  <button id="btn-revancha">Solicitar revancha</button>
   <button id="btn-menu-final" class="secundario">Menú principal</button>
-</div>
+</section>
 
-<div id="modal-pausa" class="modal" aria-hidden="true">
-  <div class="modal-contenido pausa-contenido">
-    <h2>PAUSA</h2>
-    <p class="nota-config">La batalla está detenida.</p>
-    <button id="btn-continuar">Continuar</button>
-    <button id="btn-config-pausa" class="secundario">⚙️ Configuración</button>
-    <button id="btn-salir-pausa" class="secundario boton-peligro">Salir al menú principal</button>
-    <p class="ayuda-esc">Presiona ESC para continuar</p>
-  </div>
-</div>
+<div id="modal-pausa" class="modal" aria-hidden="true"><div class="modal-contenido pausa-contenido"><h2>PAUSA</h2><p class="nota-config">La batalla está detenida.</p><button id="btn-continuar">Continuar</button><button id="btn-config-pausa" class="secundario">⚙️ Configuración</button><button id="btn-salir-pausa" class="secundario boton-peligro">Salir al menú principal</button><p class="ayuda-esc">ESC para continuar</p></div></div>
 
-<div id="modal-config" class="modal" aria-hidden="true">
-  <div class="modal-contenido">
-    <button id="btn-cerrar-config" class="cerrar">×</button>
-    <h2>CONFIGURACIÓN</h2>
-    <label class="ajuste"><span>Efectos de sonido</span><input id="toggle-sfx" type="checkbox" checked></label>
-    <label class="ajuste"><span>Música en menús</span><input id="toggle-musica" type="checkbox" checked></label>
-    <p class="nota-config">La música siempre se pausa durante las peleas.</p>
-  </div>
-</div>
+<div id="modal-config" class="modal" aria-hidden="true"><div class="modal-contenido"><button id="btn-cerrar-config" class="cerrar">×</button><h2>CONFIGURACIÓN</h2><label class="ajuste"><span>Efectos de sonido</span><input id="toggle-sfx" type="checkbox" checked></label><label class="ajuste"><span>Partículas y cámara</span><input id="toggle-fx" type="checkbox" checked></label><label class="ajuste"><span>Música en menús</span><input id="toggle-musica" type="checkbox" checked></label><p class="nota-config">Los menús usan música base y cada escenario carga su propia pista.</p></div></div>
 
-<script src="/socket.io/socket.io.js"></script><script src="game.js?v=aws-rango-v2"></script>
-</body></html>
+<script src="/socket.io/socket.io.js"></script>
+<script src="game.js?v=menu-mapas-v8"></script>
+</body>
+</html>
