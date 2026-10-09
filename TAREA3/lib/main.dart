@@ -2,8 +2,9 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:math' as math;
 
-import 'package:flutter/material.dart';
 import 'package:battery_plus/battery_plus.dart';
+import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:latlong2/latlong.dart';
@@ -14,7 +15,10 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'modelos/ubicacion_local.dart';
 import 'servicios/base_datos_local.dart';
+import 'servicios/filtro_gps.dart';
 import 'servicios/seguimiento_remoto.dart';
+
+const _versionApp = '1.1.0';
 
 void main() {
   runApp(const AplicacionMovimiento());
@@ -116,6 +120,23 @@ class RegistroMovimiento {
   }
 }
 
+/// Telemetría instantánea mostrada en pantalla.
+class Telemetria {
+  const Telemetria({
+    this.velocidadKmh = 0,
+    this.precision,
+    this.frecuenciaHz,
+    this.edadFixMs,
+    this.senalDebil = false,
+  });
+
+  final double velocidadKmh;
+  final double? precision;
+  final double? frecuenciaHz;
+  final int? edadFixMs;
+  final bool senalDebil;
+}
+
 class PantallaMovimiento extends StatefulWidget {
   const PantallaMovimiento({super.key});
 
@@ -123,19 +144,44 @@ class PantallaMovimiento extends StatefulWidget {
   State<PantallaMovimiento> createState() => _PantallaMovimientoState();
 }
 
-class _PantallaMovimientoState extends State<PantallaMovimiento> {
+class _PantallaMovimientoState extends State<PantallaMovimiento>
+    with SingleTickerProviderStateMixin {
   static const _ubicacionInicial = LatLng(-13.53195, -71.96746);
-  static const _cartoApiKey = String.fromEnvironment('CARTO_API_KEY');
+  static const _cartoApiKey = String.fromEnvironment(
+    'CARTO_API_KEY',
+    defaultValue: 'cb1_4f7e_1_cec811c28cf2ef52dd7565da',
+  );
+  static const _intervalosDisponibles = [250, 500, 1000, 2000];
+
   final _mapController = MapController();
   final _bateria = Battery();
   final _baseDatos = BaseDatosLocal.instancia;
   final _seguimientoRemoto = SeguimientoRemoto();
-  final _puntos = <LatLng>[];
+  final _filtro = FiltroGps();
   final _historial = <RegistroMovimiento>[];
+
+  /// Segmentos del recorrido (se abre uno nuevo al reanudar tras una pausa).
+  final _segmentos = <List<LatLng>>[];
+
+  // Valores que cambian muchas veces por segundo: se notifican sin
+  // reconstruir toda la pantalla (el acelerómetro antes redibujaba el mapa
+  // a ~60 Hz y causaba tirones).
+  final _posicionMostrada = ValueNotifier<LatLng?>(null);
+  final _aceleracion = ValueNotifier<double>(0);
+  final _telemetria = ValueNotifier(const Telemetria());
+
+  late final AnimationController _animacion;
+  LatLng? _desde;
+  LatLng? _hasta;
+  double _rumbo = 0;
+  double _precisionFiltro = 0;
+
   StreamSubscription<Position>? _ubicacionSuscripcion;
   StreamSubscription<UserAccelerometerEvent>? _sensorSuscripcion;
-  LatLng _centro = _ubicacionInicial;
-  double _aceleracion = 0;
+  Timer? _temporizadorBateria;
+  Timer? _temporizadorEdad;
+
+  double _aceleracionFiltrada = 0;
   double _distanciaMetros = 0;
   double _velocidadMaximaKmh = 0;
   double _velocidadTotalKmh = 0;
@@ -143,26 +189,37 @@ class _PantallaMovimientoState extends State<PantallaMovimiento> {
   int _muestrasAceleracion = 0;
   int _muestrasVelocidad = 0;
   int _bateriaInicio = 0;
+  int? _nivelBateria;
+  int _contadorMuestras = 0;
   DateTime? _inicioRegistro;
-  Position? _ultimaPosicion;
+  DateTime? _ultimoFix;
+  double? _frecuenciaHz;
   bool _registrando = false;
   bool _estaMoviendose = false;
+  bool _esperandoFix = false;
   bool _cargando = true;
   bool _pausado = false;
+  bool _seguir = true;
+  bool _nuevoSegmento = true;
   String _deviceId = '';
   int _intervaloMilisegundos = 500;
   String? _mensaje;
 
-  String get _mapTileUrl => _cartoApiKey.isEmpty
-      ? 'https://tile.openstreetmap.org/{z}/{x}/{y}.png'
-      : 'https://basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png?key=$_cartoApiKey';
+  String get _mapTileUrl =>
+      'https://basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png?key=$_cartoApiKey';
+
+  List<LatLng> get _todosLosPuntos => [for (final s in _segmentos) ...s];
+
+  int get _cantidadPuntos =>
+      _segmentos.fold(0, (total, segmento) => total + segmento.length);
 
   @override
   void initState() {
     super.initState();
+    _animacion = AnimationController(vsync: this)..addListener(_animarMarcador);
     _cargarHistorial();
     _cargarConfiguracion();
-    _seguimientoRemoto.cargarSesion();
+    _mostrarUltimaUbicacionConocida();
   }
 
   Future<void> _cargarConfiguracion() async {
@@ -173,10 +230,13 @@ class _PantallaMovimientoState extends State<PantallaMovimiento> {
           'android-${DateTime.now().microsecondsSinceEpoch}-${math.Random.secure().nextInt(1 << 32).toRadixString(16)}';
       await preferencias.setString('device_id', deviceId);
     }
+    final intervalo = preferencias.getInt('intervalo_gps') ?? 500;
     if (!mounted) return;
     setState(() {
       _deviceId = deviceId!;
-      _intervaloMilisegundos = preferencias.getInt('intervalo_gps') ?? 500;
+      _intervaloMilisegundos = _intervalosDisponibles.contains(intervalo)
+          ? intervalo
+          : 500;
     });
   }
 
@@ -198,6 +258,24 @@ class _PantallaMovimientoState extends State<PantallaMovimiento> {
     });
   }
 
+  /// Centra el mapa en la última posición conocida sin pedir permisos.
+  Future<void> _mostrarUltimaUbicacionConocida() async {
+    try {
+      final permiso = await Geolocator.checkPermission();
+      if (permiso != LocationPermission.always &&
+          permiso != LocationPermission.whileInUse) {
+        return;
+      }
+      final ultima = await Geolocator.getLastKnownPosition();
+      if (ultima == null || !mounted || _posicionMostrada.value != null) return;
+      final punto = LatLng(ultima.latitude, ultima.longitude);
+      _posicionMostrada.value = punto;
+      _mapController.move(punto, 17);
+    } catch (_) {
+      // Sin plugin (tests) o sin servicio de ubicación.
+    }
+  }
+
   Future<void> _alternarRegistro() async {
     if (_registrando) {
       await _detenerRegistro();
@@ -206,16 +284,16 @@ class _PantallaMovimientoState extends State<PantallaMovimiento> {
     }
   }
 
-  Future<void> _iniciarRegistro() async {
+  Future<bool> _verificarPermisos() async {
     if (!await Geolocator.isLocationServiceEnabled()) {
       if (mounted) {
         setState(
           () => _mensaje =
               'La ubicación está desactivada. Actívala para comenzar.',
         );
-        await _mostrarConfiguracionUbicacion();
       }
-      return;
+      await Geolocator.openLocationSettings();
+      return false;
     }
     var permiso = await Geolocator.checkPermission();
     if (permiso == LocationPermission.denied) {
@@ -225,300 +303,341 @@ class _PantallaMovimientoState extends State<PantallaMovimiento> {
       if (mounted) {
         setState(
           () => _mensaje =
-              'El permiso está bloqueado. Actívalo en Ajustes > Aplicaciones > app > Permisos.',
+              'El permiso está bloqueado. Actívalo en Ajustes > Aplicaciones > Movimiento GPS > Permisos.',
         );
-        await Geolocator.openAppSettings();
       }
-      return;
-    }
-    if (permiso == LocationPermission.denied) {
-      setState(
-        () => _mensaje =
-            'Debes permitir el acceso a la ubicación para registrar el recorrido.',
-      );
-      return;
-    }
-    if (permiso == LocationPermission.whileInUse) {
-      permiso = await Geolocator.requestPermission();
+      await Geolocator.openAppSettings();
+      return false;
     }
     if (permiso != LocationPermission.always &&
         permiso != LocationPermission.whileInUse) {
-      setState(
-        () => _mensaje = 'Se necesita permiso de ubicación para continuar.',
-      );
-      return;
-    }
-    if (await Permission.notification.isDenied) {
-      await Permission.notification.request();
-    }
-
-    try {
-      final posicion = await Geolocator.getCurrentPosition(
-        locationSettings: const LocationSettings(
-          accuracy: LocationAccuracy.high,
-          timeLimit: Duration(seconds: 20),
-        ),
-      );
-      final puntoInicial = LatLng(posicion.latitude, posicion.longitude);
-      await _registrarDispositivoLocal();
-      await _seguimientoRemoto.iniciarTiempoReal();
-      _bateriaInicio = await _bateria.batteryLevel;
-      setState(() {
-        _puntos
-          ..clear()
-          ..add(puntoInicial);
-        _centro = puntoInicial;
-        _registrando = true;
-        _pausado = false;
-        _mensaje = null;
-        _inicioRegistro = DateTime.now();
-        _ultimaPosicion = posicion;
-        _distanciaMetros = 0;
-        _velocidadMaximaKmh = 0;
-        _velocidadTotalKmh = 0;
-        _aceleracionTotal = 0;
-        _muestrasAceleracion = 0;
-        _muestrasVelocidad = 0;
-      });
-      _mapController.move(puntoInicial, 17);
-      _ubicacionSuscripcion = Geolocator.getPositionStream(
-        locationSettings: AndroidSettings(
-          accuracy: LocationAccuracy.high,
-          distanceFilter: 5,
-          intervalDuration: Duration(milliseconds: _intervaloMilisegundos),
-          foregroundNotificationConfig: const ForegroundNotificationConfig(
-            notificationTitle: 'Rastro está registrando tu recorrido',
-            notificationText: 'La ubicación continúa activa en segundo plano',
-            notificationChannelName: 'Seguimiento de movimiento',
-            setOngoing: true,
-            enableWakeLock: true,
-          ),
-        ),
-      ).listen(_agregarUbicacion);
-      _sensorSuscripcion = userAccelerometerEventStream().listen(
-        _leerAcelerometro,
-      );
-      await _guardarUbicacion(posicion);
-    } on TimeoutException {
       if (mounted) {
         setState(
           () => _mensaje =
-              'El GPS tardó demasiado. Sal a un lugar abierto y vuelve a intentarlo.',
-        );
-      }
-
-    } on LocationServiceDisabledException {
-      if (mounted) {
-        setState(
-          () => _mensaje = 'La ubicación está desactivada en el teléfono.',
-        );
-        await _mostrarConfiguracionUbicacion();
-      }
-    } on PermissionDeniedException {
-      if (mounted) {
-        setState(
-          () =>
-              _mensaje = 'Android no concedió permiso para leer la ubicación.',
-        );
-      }
-    } catch (_) {
-      if (mounted) {
-        setState(
-          () => _mensaje =
-              'No se pudo obtener la ubicación. Revisa GPS y permisos del teléfono.',
-        );
-      }
-    }
-  }
-
-  Future<void> _registrarDispositivoLocal() async {
-    try {
-      await _seguimientoRemoto.registrarDispositivo(
-        nombre: 'Mi celular',
-        version: '1.0.0',
-      );
-    } catch (_) {
-      if (mounted) {
-        setState(
-          () => _mensaje =
-              'No se pudo conectar al monitoreo web. El GPS local seguirá funcionando.',
-        );
-      }
-    }
-  }
-
-  // ignore: unused_element
-  Future<bool> _asegurarAutorizacionRemota() async {
-    if (_seguimientoRemoto.estaAutorizado) return true;
-    if (!mounted) return false;
-    final correo = TextEditingController();
-    final contrasena = TextEditingController();
-    var consentimiento = false;
-    final autorizado = await showDialog<bool>(
-      context: context,
-      builder: (context) => StatefulBuilder(
-        builder: (context, actualizar) => AlertDialog(
-          title: const Text('Autorizar seguimiento'),
-          content: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Text(
-                  'Se enviarán ubicación, batería y datos del dispositivo al panel autorizado mientras el registro esté activo.',
-                ),
-                TextField(
-                  controller: correo,
-                  keyboardType: TextInputType.emailAddress,
-                  decoration: const InputDecoration(labelText: 'Correo'),
-                ),
-                TextField(
-                  controller: contrasena,
-                  obscureText: true,
-                  decoration: const InputDecoration(labelText: 'Contraseña'),
-                ),
-                CheckboxListTile(
-                  contentPadding: EdgeInsets.zero,
-                  value: consentimiento,
-                  onChanged: (valor) =>
-                      actualizar(() => consentimiento = valor ?? false),
-                  title: const Text('Acepto enviar estos datos.'),
-                ),
-              ],
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context, false),
-              child: const Text('Cancelar'),
-            ),
-            FilledButton(
-              onPressed: consentimiento
-                  ? () async {
-                      final ingreso = await _seguimientoRemoto.iniciarSesion(
-                        correo.text.trim(),
-                        contrasena.text,
-                      );
-                      if (!context.mounted) return;
-                      if (ingreso) {
-                        Navigator.pop(context, true);
-                      } else {
-                        setState(
-                          () => _mensaje =
-                              'No se pudo iniciar sesión en el servidor.',
-                        );
-                      }
-                    }
-                  : null,
-              child: const Text('Autorizar'),
-            ),
-          ],
-        ),
-      ),
-    );
-    correo.dispose();
-    contrasena.dispose();
-    if (autorizado != true) return false;
-    try {
-      await _seguimientoRemoto.registrarDispositivo(
-        nombre: 'Mi celular',
-        version: '1.0.0',
-      );
-      return true;
-    } catch (_) {
-      if (mounted) {
-        setState(
-          () =>
-              _mensaje = 'No se pudo registrar el dispositivo en el servidor.',
+              'Debes permitir el acceso a la ubicación para registrar el recorrido.',
         );
       }
       return false;
     }
+    // Sin precisión exacta (Android 12+) el punto puede estar a ~2 km.
+    try {
+      final precision = await Geolocator.getLocationAccuracy();
+      if (precision == LocationAccuracyStatus.reduced && mounted) {
+        setState(
+          () => _mensaje =
+              'Activa "Ubicación precisa" en los permisos de la app para un seguimiento exacto.',
+        );
+      }
+    } catch (_) {}
+    if (await Permission.notification.isDenied) {
+      await Permission.notification.request();
+    }
+    return true;
   }
 
-  Future<void> _mostrarConfiguracionUbicacion() async {
-    await Geolocator.openLocationSettings();
+  Future<void> _iniciarRegistro() async {
+    if (!await _verificarPermisos()) return;
+    if (_deviceId.isEmpty) await _cargarConfiguracion();
+
+    _filtro.reiniciar();
+    _nivelBateria = await _leerBateria();
+    _bateriaInicio = _nivelBateria ?? 0;
+    _seguimientoRemoto.bateria = _nivelBateria;
+    if (!mounted) return;
+    setState(() {
+      _segmentos.clear();
+      _nuevoSegmento = true;
+      _registrando = true;
+      _esperandoFix = true;
+      _pausado = false;
+      _seguir = true;
+      _mensaje = null;
+      _inicioRegistro = DateTime.now();
+      _ultimoFix = null;
+      _frecuenciaHz = null;
+      _contadorMuestras = 0;
+      _distanciaMetros = 0;
+      _velocidadMaximaKmh = 0;
+      _velocidadTotalKmh = 0;
+      _aceleracionTotal = 0;
+      _muestrasAceleracion = 0;
+      _muestrasVelocidad = 0;
+    });
+    _telemetria.value = const Telemetria();
+
+    // La conexión se abre en paralelo: el GPS empieza a registrar de
+    // inmediato y las muestras quedan en cola local hasta que haya enlace.
+    unawaited(
+      _seguimientoRemoto.iniciar(
+        deviceId: _deviceId,
+        nombre: 'Mi celular',
+        version: _versionApp,
+      ),
+    );
+    _suscribirSensores();
+
+    _temporizadorBateria?.cancel();
+    _temporizadorBateria = Timer.periodic(const Duration(seconds: 30), (
+      _,
+    ) async {
+      _nivelBateria = await _leerBateria();
+      _seguimientoRemoto.bateria = _nivelBateria;
+    });
+    _temporizadorEdad?.cancel();
+    _temporizadorEdad = Timer.periodic(
+      const Duration(milliseconds: 500),
+      (_) => _actualizarEdadFix(),
+    );
+  }
+
+  Future<int?> _leerBateria() async {
+    try {
+      return await _bateria.batteryLevel;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  LocationSettings _configuracionGps() {
+    if (defaultTargetPlatform == TargetPlatform.android) {
+      return AndroidSettings(
+        accuracy: LocationAccuracy.bestForNavigation,
+        // 0 m: antes con 5 m, caminando solo llegaba un punto cada 3-4 s.
+        distanceFilter: 0,
+        intervalDuration: Duration(milliseconds: _intervaloMilisegundos),
+        foregroundNotificationConfig: const ForegroundNotificationConfig(
+          notificationTitle: 'Movimiento GPS está registrando tu recorrido',
+          notificationText: 'Seguimiento en tiempo real activo',
+          notificationChannelName: 'Seguimiento de movimiento',
+          setOngoing: true,
+          enableWakeLock: true,
+          enableWifiLock: true,
+        ),
+      );
+    }
+    if (defaultTargetPlatform == TargetPlatform.iOS) {
+      return AppleSettings(
+        accuracy: LocationAccuracy.bestForNavigation,
+        distanceFilter: 0,
+        activityType: ActivityType.fitness,
+        pauseLocationUpdatesAutomatically: false,
+        showBackgroundLocationIndicator: true,
+      );
+    }
+    return const LocationSettings(
+      accuracy: LocationAccuracy.bestForNavigation,
+      distanceFilter: 0,
+    );
+  }
+
+  void _suscribirSensores() {
+    unawaited(_ubicacionSuscripcion?.cancel());
+    unawaited(_sensorSuscripcion?.cancel());
+    _ubicacionSuscripcion = Geolocator.getPositionStream(
+      locationSettings: _configuracionGps(),
+    ).listen(_agregarUbicacion, onError: _errorGps);
+    _sensorSuscripcion = userAccelerometerEventStream(
+      samplingPeriod: SensorInterval.uiInterval,
+    ).listen(_leerAcelerometro, onError: (_) {});
+  }
+
+  void _errorGps(Object error) {
+    if (!mounted) return;
+    setState(() {
+      _mensaje = switch (error) {
+        LocationServiceDisabledException() =>
+          'La ubicación se desactivó en el teléfono.',
+        PermissionDeniedException() =>
+          'Android retiró el permiso de ubicación.',
+        _ => 'Error del GPS: $error',
+      };
+    });
   }
 
   void _agregarUbicacion(Position posicion) {
     if (!mounted) return;
-    if (!posicion.latitude.isFinite ||
-        !posicion.longitude.isFinite ||
-        posicion.latitude < -90 ||
-        posicion.latitude > 90 ||
-        posicion.longitude < -180 ||
-        posicion.longitude > 180) {
-      return;
-    }
-    final anterior = _ultimaPosicion;
-    if (anterior != null &&
-        anterior.latitude == posicion.latitude &&
-        anterior.longitude == posicion.longitude &&
-        anterior.timestamp == posicion.timestamp) {
-      return;
-    }
-    final punto = LatLng(posicion.latitude, posicion.longitude);
+    final ahora = DateTime.now();
+
+    // Frecuencia real de muestras (media móvil exponencial).
+    final anterior = _ultimoFix;
     if (anterior != null) {
-      _distanciaMetros += Geolocator.distanceBetween(
-        anterior.latitude,
-        anterior.longitude,
-        posicion.latitude,
-        posicion.longitude,
-      );
+      final dt = ahora.difference(anterior).inMilliseconds;
+      if (dt > 0) {
+        final hz = 1000 / dt;
+        _frecuenciaHz = _frecuenciaHz == null
+            ? hz
+            : _frecuenciaHz! * 0.8 + hz * 0.2;
+      }
     }
-    _ultimaPosicion = posicion;
-    final velocidadKmh = posicion.speed >= 0 ? posicion.speed * 3.6 : 0.0;
-    _velocidadMaximaKmh = math
-        .max(_velocidadMaximaKmh, velocidadKmh)
-        .toDouble();
-    _velocidadTotalKmh += velocidadKmh;
-    _muestrasVelocidad++;
-    setState(() {
-      _puntos.add(punto);
-      _centro = punto;
-    });
-    unawaited(_guardarUbicacion(posicion));
-    _mapController.move(punto, _mapController.camera.zoom);
+    _ultimoFix = ahora;
+
+    // Edad de la lectura. Si el reloj del GPS y el del sistema no coinciden
+    // (diferencia negativa o enorme) se usa el instante de recepción.
+    var edad = ahora.difference(posicion.timestamp);
+    if (edad.isNegative || edad > const Duration(seconds: 10)) {
+      edad = Duration.zero;
+    }
+
+    final lectura = _filtro.procesar(
+      latitud: posicion.latitude,
+      longitud: posicion.longitude,
+      precision: posicion.accuracy,
+      velocidad: posicion.speed,
+      rumbo: posicion.heading,
+      tiempoMs: ahora.subtract(edad).millisecondsSinceEpoch,
+    );
+
+    if (lectura == null) {
+      _telemetria.value = Telemetria(
+        velocidadKmh: _telemetria.value.velocidadKmh,
+        precision: posicion.accuracy,
+        frecuenciaHz: _frecuenciaHz,
+        edadFixMs: edad.inMilliseconds,
+        senalDebil: true,
+      );
+      return;
+    }
+
+    final punto = lectura.punto;
+    final velocidadKmh = lectura.enMovimiento ? lectura.velocidad * 3.6 : 0.0;
+    _precisionFiltro = math.min(posicion.accuracy, lectura.precision);
+    if (lectura.rumbo != null) _rumbo = lectura.rumbo!;
+
+    final primerFix = _esperandoFix;
+    final segmentoNuevo = _nuevoSegmento || _segmentos.isEmpty;
+    if (segmentoNuevo) {
+      _segmentos.add([punto]);
+      _nuevoSegmento = false;
+    } else {
+      final segmento = _segmentos.last;
+      final distancia = Geolocator.distanceBetween(
+        segmento.last.latitude,
+        segmento.last.longitude,
+        punto.latitude,
+        punto.longitude,
+      );
+      // Solo se acumula distancia si el movimiento supera el ruido del GPS
+      // (o si el desplazamiento acumulado ya es claramente real).
+      if ((lectura.enMovimiento && distancia >= 1.0) ||
+          distancia > math.max(5.0, posicion.accuracy)) {
+        segmento.add(punto);
+        _distanciaMetros += distancia;
+      }
+    }
+    if (lectura.enMovimiento) {
+      _velocidadMaximaKmh = math.max(_velocidadMaximaKmh, velocidadKmh);
+      _velocidadTotalKmh += velocidadKmh;
+      _muestrasVelocidad++;
+    }
+    _contadorMuestras++;
+
+    _telemetria.value = Telemetria(
+      velocidadKmh: velocidadKmh,
+      precision: posicion.accuracy,
+      frecuenciaHz: _frecuenciaHz,
+      edadFixMs: edad.inMilliseconds,
+    );
+
+    _moverMarcador(punto, primerFix);
+    // Redibuja ruta y distancia (como mucho a la frecuencia del GPS).
+    setState(() => _esperandoFix = false);
+
+    // Marca de tiempo alineada con el reloj del servidor.
+    final marcaServidor = ahora
+        .subtract(edad)
+        .add(Duration(milliseconds: _seguimientoRemoto.offsetRelojMs));
+    unawaited(
+      _guardarYEnviar(
+        UbicacionLocal(
+          sampleId:
+              '$_deviceId-${marcaServidor.microsecondsSinceEpoch}-$_contadorMuestras',
+          deviceId: _deviceId,
+          latitude: punto.latitude,
+          longitude: punto.longitude,
+          timestamp: marcaServidor,
+          accuracy: posicion.accuracy,
+          speed: lectura.enMovimiento ? lectura.velocidad : 0,
+          heading: _rumbo,
+          altitude: posicion.altitude.isFinite ? posicion.altitude : null,
+          battery: _nivelBateria,
+        ),
+      ),
+    );
   }
 
-  Future<void> _guardarUbicacion(Position posicion) async {
+  Future<void> _guardarYEnviar(UbicacionLocal ubicacion) async {
     if (_deviceId.isEmpty) return;
-    final localId = await _baseDatos.insertarUbicacion(
-      UbicacionLocal(
-        deviceId: _deviceId,
-        latitude: posicion.latitude,
-        longitude: posicion.longitude,
-        timestamp: posicion.timestamp,
-        accuracy: posicion.accuracy,
-        speed: posicion.speed,
-        heading: posicion.heading,
-        battery: await _bateria.batteryLevel,
-      ),
+    // Primero se envía (camino crítico de latencia) y luego se persiste.
+    _seguimientoRemoto.enviar(ubicacion);
+    try {
+      await _baseDatos.insertarUbicacion(ubicacion);
+    } catch (_) {}
+  }
+
+  /// Anima el marcador desde la posición mostrada hasta la nueva lectura
+  /// durante (casi) el intervalo entre muestras: movimiento continuo sin
+  /// saltos y sin acumular retraso.
+  void _moverMarcador(LatLng destino, bool inmediato) {
+    final actual = _posicionMostrada.value;
+    if (inmediato || actual == null) {
+      _animacion.stop();
+      _desde = destino;
+      _hasta = destino;
+      _posicionMostrada.value = destino;
+      if (_seguir) {
+        _mapController.move(destino, math.max(_mapController.camera.zoom, 17));
+      }
+      return;
+    }
+    _desde = actual;
+    _hasta = destino;
+    final intervalo = (1000 / (_frecuenciaHz ?? 2)).clamp(100, 1000);
+    _animacion.duration = Duration(milliseconds: (intervalo * 0.9).round());
+    _animacion.forward(from: 0);
+  }
+
+  void _animarMarcador() {
+    final desde = _desde;
+    final hasta = _hasta;
+    if (desde == null || hasta == null) return;
+    final t = _animacion.value;
+    final punto = LatLng(
+      desde.latitude + (hasta.latitude - desde.latitude) * t,
+      desde.longitude + (hasta.longitude - desde.longitude) * t,
     );
-    unawaited(
-      _seguimientoRemoto.enviarUbicacion(
-        latitude: posicion.latitude,
-        longitude: posicion.longitude,
-        accuracy: posicion.accuracy,
-        speed: posicion.speed,
-        heading: posicion.heading,
-        battery: await _bateria.batteryLevel,
-        timestamp: posicion.timestamp,
-        localId: localId,
-      ),
-    );
+    _posicionMostrada.value = punto;
+    if (_seguir) _mapController.move(punto, _mapController.camera.zoom);
+  }
+
+  void _actualizarEdadFix() {
+    final ultimo = _ultimoFix;
+    if (ultimo == null || _pausado) return;
+    final edad = DateTime.now().difference(ultimo).inMilliseconds;
+    final actual = _telemetria.value;
+    if (edad > 3000 && !actual.senalDebil) {
+      _telemetria.value = Telemetria(
+        velocidadKmh: actual.velocidadKmh,
+        precision: actual.precision,
+        frecuenciaHz: actual.frecuenciaHz,
+        edadFixMs: edad,
+        senalDebil: true,
+      );
+    }
   }
 
   void _leerAcelerometro(UserAccelerometerEvent evento) {
     final intensidad = math.sqrt(
       evento.x * evento.x + evento.y * evento.y + evento.z * evento.z,
     );
-    if (!mounted) return;
-    setState(() {
-      _aceleracion = intensidad;
-      _estaMoviendose = intensidad > 1.2;
-      _aceleracionTotal += intensidad;
-      _muestrasAceleracion++;
-    });
+    // Filtro paso bajo para que el valor no "baile".
+    _aceleracionFiltrada = _aceleracionFiltrada * 0.8 + intensidad * 0.2;
+    _aceleracion.value = _aceleracionFiltrada;
+    _aceleracionTotal += intensidad;
+    _muestrasAceleracion++;
+    final moviendose = _aceleracionFiltrada > 1.2;
+    if (moviendose != _estaMoviendose && mounted) {
+      setState(() => _estaMoviendose = moviendose);
+    }
   }
 
   Future<void> _detenerRegistro() async {
@@ -526,7 +645,12 @@ class _PantallaMovimientoState extends State<PantallaMovimiento> {
     await _sensorSuscripcion?.cancel();
     _ubicacionSuscripcion = null;
     _sensorSuscripcion = null;
-    if (_puntos.isNotEmpty) {
+    _temporizadorBateria?.cancel();
+    _temporizadorEdad?.cancel();
+    _animacion.stop();
+    unawaited(_seguimientoRemoto.detener());
+    final puntos = _todosLosPuntos;
+    if (puntos.isNotEmpty) {
       final fechaFin = DateTime.now();
       final fechaInicio = _inicioRegistro ?? fechaFin;
       final velocidadPromedio = _muestrasVelocidad == 0
@@ -536,7 +660,7 @@ class _PantallaMovimientoState extends State<PantallaMovimiento> {
           ? 0.0
           : _aceleracionTotal / _muestrasAceleracion;
       final registro = RegistroMovimiento(
-        puntos: List.of(_puntos),
+        puntos: puntos,
         fechaInicio: fechaInicio,
         fechaFin: fechaFin,
         distanciaMetros: _distanciaMetros,
@@ -545,7 +669,7 @@ class _PantallaMovimientoState extends State<PantallaMovimiento> {
         aceleracionPromedio: aceleracionPromedio,
         tipoMovimiento: _tipoMovimiento(velocidadPromedio, aceleracionPromedio),
         bateriaInicio: _bateriaInicio,
-        bateriaFin: await _bateria.batteryLevel,
+        bateriaFin: await _leerBateria() ?? _bateriaInicio,
       );
       _historial.insert(0, registro);
       final preferencias = await SharedPreferences.getInstance();
@@ -557,9 +681,30 @@ class _PantallaMovimientoState extends State<PantallaMovimiento> {
     if (mounted) {
       setState(() {
         _registrando = false;
+        _esperandoFix = false;
+        _pausado = false;
         _inicioRegistro = null;
-        _ultimaPosicion = null;
+        _ultimoFix = null;
       });
+    }
+  }
+
+  Future<void> _alternarPausa() async {
+    if (!_registrando) return;
+    if (_pausado) {
+      _filtro.reiniciar();
+      _nuevoSegmento = true;
+      _ultimoFix = null;
+      _frecuenciaHz = null;
+      _suscribirSensores();
+      setState(() => _pausado = false);
+    } else {
+      await _ubicacionSuscripcion?.cancel();
+      await _sensorSuscripcion?.cancel();
+      _ubicacionSuscripcion = null;
+      _sensorSuscripcion = null;
+      _animacion.stop();
+      if (mounted) setState(() => _pausado = true);
     }
   }
 
@@ -571,17 +716,32 @@ class _PantallaMovimientoState extends State<PantallaMovimiento> {
     return 'En reposo';
   }
 
+  void _centrar() {
+    final punto = _posicionMostrada.value;
+    setState(() => _seguir = true);
+    if (punto != null) {
+      _mapController.move(punto, math.max(_mapController.camera.zoom, 17));
+    }
+  }
+
   @override
   void dispose() {
     _ubicacionSuscripcion?.cancel();
     _sensorSuscripcion?.cancel();
-    _seguimientoRemoto.cerrar();
+    _temporizadorBateria?.cancel();
+    _temporizadorEdad?.cancel();
+    _animacion.dispose();
+    _seguimientoRemoto.dispose();
+    _posicionMostrada.dispose();
+    _aceleracion.dispose();
+    _telemetria.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     final tema = Theme.of(context);
+    final color = tema.colorScheme.primary;
     return Scaffold(
       appBar: AppBar(
         title: const Text('Rastro'),
@@ -605,63 +765,127 @@ class _PantallaMovimientoState extends State<PantallaMovimiento> {
               children: [
                 FlutterMap(
                   mapController: _mapController,
-                  options: MapOptions(initialCenter: _centro, initialZoom: 15),
+                  options: MapOptions(
+                    initialCenter: _ubicacionInicial,
+                    initialZoom: 15,
+                    minZoom: 3,
+                    maxZoom: 20,
+                    // Sin rotación: el mapa queda siempre con el norte arriba
+                    // y la flecha indica el rumbo real.
+                    interactionOptions: const InteractionOptions(
+                      flags: InteractiveFlag.all & ~InteractiveFlag.rotate,
+                    ),
+                    onPositionChanged: (camera, gesto) {
+                      if (gesto && _seguir) setState(() => _seguir = false);
+                    },
+                  ),
                   children: [
                     TileLayer(
                       urlTemplate: _mapTileUrl,
-                      subdomains: const ['a', 'b', 'c', 'd'],
-                      userAgentPackageName: 'com.example.movimiento',
+                      retinaMode: RetinaMode.isHighDensity(context),
+                      maxNativeZoom: 20,
+                      // Precarga mosaicos alrededor para no ver huecos grises al moverse.
+                      keepBuffer: 4,
+                      panBuffer: 1,
+                      userAgentPackageName: 'com.example.app',
                     ),
-                    RichAttributionWidget(
-                      attributions: [
-                        const TextSourceAttribution(
-                          'OpenStreetMap contributors',
-                        ),
-                        if (_cartoApiKey.isNotEmpty)
-                          const TextSourceAttribution('CARTO'),
-                      ],
-                    ),
-                    if (_puntos.length > 1)
+                    if (_segmentos.isNotEmpty)
                       PolylineLayer(
                         polylines: [
-                          Polyline(
-                            points: _puntos,
-                            color: tema.colorScheme.primary,
-                            strokeWidth: 5,
-                          ),
+                          for (final segmento in _segmentos)
+                            if (segmento.length > 1)
+                              Polyline(
+                                points: segmento,
+                                color: color,
+                                strokeWidth: 5,
+                              ),
                         ],
                       ),
-                    MarkerLayer(
-                      markers: [
-                        Marker(
-                          point: _centro,
-                          width: 44,
-                          height: 44,
-                          child: DecoratedBox(
-                            decoration: BoxDecoration(
-                              color: tema.colorScheme.primary,
-                              shape: BoxShape.circle,
-                              border: Border.all(color: Colors.white, width: 4),
+                    ValueListenableBuilder<LatLng?>(
+                      valueListenable: _posicionMostrada,
+                      builder: (context, posicion, _) {
+                        if (posicion == null) return const SizedBox.shrink();
+                        final ultimo = _segmentos.isEmpty || _pausado
+                            ? null
+                            : _segmentos.last.last;
+                        return Stack(
+                          children: [
+                            if (ultimo != null)
+                              PolylineLayer(
+                                polylines: [
+                                  Polyline(
+                                    points: [ultimo, posicion],
+                                    color: color,
+                                    strokeWidth: 5,
+                                  ),
+                                ],
+                              ),
+                            if (_registrando && _precisionFiltro > 0)
+                              CircleLayer(
+                                circles: [
+                                  CircleMarker(
+                                    point: posicion,
+                                    radius: _precisionFiltro,
+                                    useRadiusInMeter: true,
+                                    color: color.withValues(alpha: 0.12),
+                                    borderColor: color.withValues(alpha: 0.4),
+                                    borderStrokeWidth: 1,
+                                  ),
+                                ],
+                              ),
+                            MarkerLayer(
+                              markers: [
+                                Marker(
+                                  point: posicion,
+                                  width: 44,
+                                  height: 44,
+                                  child: _MarcadorRumbo(
+                                    color: color,
+                                    rumboGrados: _rumbo,
+                                  ),
+                                ),
+                              ],
                             ),
-                            child: const Icon(
-                              Icons.navigation_rounded,
-                              color: Colors.white,
-                              size: 21,
-                            ),
-                          ),
-                        ),
+                          ],
+                        );
+                      },
+                    ),
+                    RichAttributionWidget(
+                      attributions: const [
+                        TextSourceAttribution('OpenStreetMap contributors'),
+                        TextSourceAttribution('CARTO'),
                       ],
                     ),
                   ],
                 ),
                 Positioned(
-                  top: 16,
-                  left: 16,
-                  right: 16,
+                  top: 12,
+                  left: 12,
+                  right: 12,
                   child: _EstadoRegistro(
                     registrando: _registrando,
+                    pausado: _pausado,
+                    esperandoFix: _esperandoFix,
                     moviendose: _estaMoviendose,
                     aceleracion: _aceleracion,
+                    telemetria: _telemetria,
+                    remoto: _seguimientoRemoto.estado,
+                  ),
+                ),
+                Positioned(
+                  right: 12,
+                  bottom: 28,
+                  child: FloatingActionButton.small(
+                    heroTag: 'centrar',
+                    tooltip: _seguir ? 'Siguiendo' : 'Centrar y seguir',
+                    onPressed: _centrar,
+                    backgroundColor: _seguir ? color : tema.colorScheme.surface,
+                    foregroundColor: _seguir ? Colors.white : color,
+                    child: Icon(
+                      _seguir
+                          ? Icons.gps_fixed_rounded
+                          : Icons.gps_not_fixed_rounded,
+                    ),
                   ),
                 ),
               ],
@@ -670,9 +894,10 @@ class _PantallaMovimientoState extends State<PantallaMovimiento> {
           _PanelInferior(
             registrando: _registrando,
             pausado: _pausado,
-            cantidadPuntos: _puntos.length,
-            cantidadRecorridos: _historial.length,
+            cantidadPuntos: _cantidadPuntos,
+            distanciaMetros: _distanciaMetros,
             intervaloMilisegundos: _intervaloMilisegundos,
+            telemetria: _telemetria,
             deviceId: _deviceId,
             mensaje: _mensaje,
             onPressed: _alternarRegistro,
@@ -715,27 +940,6 @@ class _PantallaMovimientoState extends State<PantallaMovimiento> {
     );
   }
 
-  Future<void> _iniciarSuscripciones() async {
-    _ubicacionSuscripcion = Geolocator.getPositionStream(
-      locationSettings: AndroidSettings(
-        accuracy: LocationAccuracy.high,
-        distanceFilter: 5,
-        intervalDuration: Duration(milliseconds: _intervaloMilisegundos),
-        foregroundNotificationConfig: const ForegroundNotificationConfig(
-          notificationTitle: 'Rastro está registrando tu recorrido',
-          notificationText: 'La ubicación continúa activa en segundo plano',
-          notificationChannelName: 'Seguimiento de movimiento',
-          setOngoing: true,
-          enableWakeLock: true,
-        ),
-      ),
-    ).listen(_agregarUbicacion);
-    _sensorSuscripcion = userAccelerometerEventStream().listen(
-      _leerAcelerometro,
-    );
-    if (mounted) setState(() => _pausado = false);
-  }
-
   Future<void> _mostrarConfiguracionIntervalo() async {
     var intervalo = _intervaloMilisegundos;
     final seleccionado = await showDialog<int>(
@@ -743,21 +947,32 @@ class _PantallaMovimientoState extends State<PantallaMovimiento> {
       builder: (context) => AlertDialog(
         title: const Text('Intervalo de registro'),
         content: StatefulBuilder(
-          builder: (context, actualizar) => DropdownButtonFormField<int>(
-            initialValue: intervalo,
-            decoration: const InputDecoration(
-              labelText: 'Milisegundos entre muestras',
-            ),
-            items: const [500, 1000, 2000, 5000, 10000]
-                .map(
-                  (valor) => DropdownMenuItem(
-                    value: valor,
-                    child: Text('$valor ms'),
-                  ),
-                )
-                .toList(),
-            onChanged: (valor) =>
-                actualizar(() => intervalo = valor ?? intervalo),
+          builder: (context, actualizar) => Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              DropdownButtonFormField<int>(
+                initialValue: intervalo,
+                decoration: const InputDecoration(
+                  labelText: 'Milisegundos entre muestras',
+                ),
+                items: _intervalosDisponibles
+                    .map(
+                      (valor) => DropdownMenuItem(
+                        value: valor,
+                        child: Text('$valor ms'),
+                      ),
+                    )
+                    .toList(),
+                onChanged: (valor) =>
+                    actualizar(() => intervalo = valor ?? intervalo),
+              ),
+              const SizedBox(height: 12),
+              const Text(
+                'La mayoría de los GPS de celular entregan 1 lectura por segundo; '
+                'con 250-500 ms se recibe cada lectura apenas está disponible.',
+              ),
+            ],
           ),
         ),
         actions: [
@@ -776,21 +991,8 @@ class _PantallaMovimientoState extends State<PantallaMovimiento> {
     final preferencias = await SharedPreferences.getInstance();
     await preferencias.setInt('intervalo_gps', seleccionado);
     setState(() => _intervaloMilisegundos = seleccionado);
-    if (_registrando) {
-      await _detenerRegistro();
-      await _iniciarRegistro();
-    }
-  }
-
-  Future<void> _alternarPausa() async {
-    if (!_registrando) return;
-    if (_pausado) {
-      await _iniciarSuscripciones();
-    } else {
-      await _ubicacionSuscripcion?.cancel();
-      await _sensorSuscripcion?.cancel();
-      if (mounted) setState(() => _pausado = true);
-    }
+    // Se aplica sin cortar el recorrido: solo se re-suscribe al GPS.
+    if (_registrando && !_pausado) _suscribirSensores();
   }
 
   String _formatearFecha(DateTime fecha) =>
@@ -828,45 +1030,154 @@ class _PantallaMovimientoState extends State<PantallaMovimiento> {
   }
 }
 
+class _MarcadorRumbo extends StatelessWidget {
+  const _MarcadorRumbo({required this.color, required this.rumboGrados});
+
+  final Color color;
+  final double rumboGrados;
+
+  @override
+  Widget build(BuildContext context) {
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: color,
+        shape: BoxShape.circle,
+        border: Border.all(color: Colors.white, width: 4),
+        boxShadow: const [BoxShadow(blurRadius: 4, color: Colors.black26)],
+      ),
+      child: Transform.rotate(
+        angle: rumboGrados * math.pi / 180,
+        child: const Icon(
+          Icons.navigation_rounded,
+          color: Colors.white,
+          size: 21,
+        ),
+      ),
+    );
+  }
+}
+
 class _EstadoRegistro extends StatelessWidget {
   const _EstadoRegistro({
     required this.registrando,
+    required this.pausado,
+    required this.esperandoFix,
     required this.moviendose,
     required this.aceleracion,
+    required this.telemetria,
+    required this.remoto,
   });
 
   final bool registrando;
+  final bool pausado;
+  final bool esperandoFix;
   final bool moviendose;
-  final double aceleracion;
+  final ValueListenable<double> aceleracion;
+  final ValueListenable<Telemetria> telemetria;
+  final ValueListenable<EstadoRemoto> remoto;
 
   @override
   Widget build(BuildContext context) {
     final tema = Theme.of(context);
+    final String titulo;
+    if (!registrando) {
+      titulo = 'Listo para registrar';
+    } else if (pausado) {
+      titulo = 'Recorrido en pausa';
+    } else if (esperandoFix) {
+      titulo = 'Buscando señal GPS...';
+    } else {
+      titulo = moviendose ? 'Movimiento detectado' : 'Registrando recorrido';
+    }
     return Card(
       elevation: 2,
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-        child: Row(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(
-              registrando ? Icons.circle : Icons.pause_circle_outline,
-              color: registrando ? Colors.redAccent : tema.colorScheme.outline,
+            Row(
+              children: [
+                Icon(
+                  registrando && !pausado
+                      ? Icons.circle
+                      : Icons.pause_circle_outline,
+                  size: 18,
+                  color: registrando && !pausado
+                      ? Colors.redAccent
+                      : tema.colorScheme.outline,
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    titulo,
+                    style: const TextStyle(fontWeight: FontWeight.w700),
+                  ),
+                ),
+                ValueListenableBuilder<double>(
+                  valueListenable: aceleracion,
+                  builder: (context, valor, _) => Text(
+                    '${valor.toStringAsFixed(1)} m/s²',
+                    style: tema.textTheme.labelMedium,
+                  ),
+                ),
+              ],
             ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Text(
-                registrando
-                    ? (moviendose
-                          ? 'Movimiento detectado'
-                          : 'Registrando recorrido')
-                    : 'Listo para registrar',
-                style: const TextStyle(fontWeight: FontWeight.w700),
+            if (registrando) ...[
+              const SizedBox(height: 6),
+              ValueListenableBuilder<EstadoRemoto>(
+                valueListenable: remoto,
+                builder: (context, estado, _) {
+                  final (texto, color) = switch (estado.enlace) {
+                    EstadoEnlace.conectado => ('Servidor en línea', Colors.green),
+                    EstadoEnlace.conectando => ('Conectando...', Colors.orange),
+                    EstadoEnlace.desconectado => ('Sin conexión', Colors.red),
+                  };
+                  return Row(
+                    children: [
+                      Icon(Icons.cloud_rounded, size: 16, color: color),
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: Text(
+                          [
+                            texto,
+                            if (estado.rttMs != null) 'RTT ${estado.rttMs} ms',
+                            if (estado.latenciaAckMs != null)
+                              'confirmación ${estado.latenciaAckMs} ms',
+                            if (estado.pendientes > 0)
+                              '${estado.pendientes} en cola',
+                          ].join(' · '),
+                          style: tema.textTheme.labelSmall,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
+                  );
+                },
               ),
-            ),
-            Text(
-              '${aceleracion.toStringAsFixed(1)} m/s2',
-              style: tema.textTheme.labelMedium,
-            ),
+              ValueListenableBuilder<Telemetria>(
+                valueListenable: telemetria,
+                builder: (context, t, _) => t.senalDebil
+                    ? Padding(
+                        padding: const EdgeInsets.only(top: 4),
+                        child: Row(
+                          children: [
+                            const Icon(
+                              Icons.signal_cellular_connected_no_internet_0_bar_rounded,
+                              size: 16,
+                              color: Colors.orange,
+                            ),
+                            const SizedBox(width: 6),
+                            Text(
+                              'Señal GPS débil: lecturas imprecisas descartadas',
+                              style: tema.textTheme.labelSmall,
+                            ),
+                          ],
+                        ),
+                      )
+                    : const SizedBox.shrink(),
+              ),
+            ],
           ],
         ),
       ),
@@ -879,8 +1190,9 @@ class _PanelInferior extends StatelessWidget {
     required this.registrando,
     required this.pausado,
     required this.cantidadPuntos,
-    required this.cantidadRecorridos,
+    required this.distanciaMetros,
     required this.intervaloMilisegundos,
+    required this.telemetria,
     required this.deviceId,
     required this.mensaje,
     required this.onPressed,
@@ -890,8 +1202,9 @@ class _PanelInferior extends StatelessWidget {
   final bool registrando;
   final bool pausado;
   final int cantidadPuntos;
-  final int cantidadRecorridos;
+  final double distanciaMetros;
   final int intervaloMilisegundos;
+  final ValueListenable<Telemetria> telemetria;
   final String deviceId;
   final String? mensaje;
   final VoidCallback onPressed;
@@ -901,40 +1214,63 @@ class _PanelInferior extends StatelessWidget {
   Widget build(BuildContext context) {
     final tema = Theme.of(context);
     return Material(
-      color: Theme.of(context).scaffoldBackgroundColor,
+      color: tema.scaffoldBackgroundColor,
       child: SafeArea(
         top: false,
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(20, 16, 20, 18),
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 14),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceAround,
-                children: [
-                  _DatoResumen(titulo: 'Puntos', valor: '$cantidadPuntos'),
-                  _DatoResumen(
-                    titulo: 'Guardados',
-                    valor: '$cantidadRecorridos',
-                  ),
-                  _DatoResumen(titulo: 'GPS', valor: '${intervaloMilisegundos}ms'),
-                ],
-              ),
-              if (deviceId.isNotEmpty)
-                Text(
-                  'Dispositivo: $deviceId',
-                  textAlign: TextAlign.center,
-                  style: tema.textTheme.labelSmall,
+              ValueListenableBuilder<Telemetria>(
+                valueListenable: telemetria,
+                builder: (context, t, _) => Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceAround,
+                  children: [
+                    _DatoResumen(
+                      titulo: 'km/h',
+                      valor: registrando
+                          ? t.velocidadKmh.toStringAsFixed(1)
+                          : '--',
+                    ),
+                    _DatoResumen(
+                      titulo: 'Distancia',
+                      valor: distanciaMetros < 1000
+                          ? '${distanciaMetros.toStringAsFixed(0)} m'
+                          : '${(distanciaMetros / 1000).toStringAsFixed(2)} km',
+                    ),
+                    _DatoResumen(
+                      titulo: 'Precisión',
+                      valor: t.precision == null
+                          ? '--'
+                          : '±${t.precision!.toStringAsFixed(0)} m',
+                    ),
+                    _DatoResumen(
+                      titulo: 'GPS',
+                      valor: t.frecuenciaHz == null
+                          ? '${intervaloMilisegundos}ms'
+                          : '${t.frecuenciaHz!.toStringAsFixed(1)} Hz',
+                    ),
+                  ],
                 ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                '$cantidadPuntos puntos'
+                '${deviceId.isEmpty ? '' : ' · $deviceId'}',
+                textAlign: TextAlign.center,
+                style: tema.textTheme.labelSmall,
+                overflow: TextOverflow.ellipsis,
+              ),
               if (mensaje != null) ...[
-                const SizedBox(height: 10),
+                const SizedBox(height: 8),
                 Text(
                   mensaje!,
                   textAlign: TextAlign.center,
                   style: TextStyle(color: tema.colorScheme.error),
                 ),
               ],
-              const SizedBox(height: 14),
+              const SizedBox(height: 10),
               Row(
                 children: [
                   Expanded(
@@ -980,11 +1316,12 @@ class _DatoResumen extends StatelessWidget {
       children: [
         Text(
           valor,
-          style: Theme.of(
-            context,
-          ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
+          style: Theme.of(context).textTheme.titleMedium?.copyWith(
+            fontWeight: FontWeight.bold,
+            fontFeatures: const [FontFeature.tabularFigures()],
+          ),
         ),
-        Text(titulo, style: Theme.of(context).textTheme.labelMedium),
+        Text(titulo, style: Theme.of(context).textTheme.labelSmall),
       ],
     );
   }

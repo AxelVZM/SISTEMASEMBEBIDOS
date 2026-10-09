@@ -8,18 +8,25 @@ class BaseDatosLocal {
 
   static final instancia = BaseDatosLocal._();
   Database? _baseDatos;
+  Future<Database>? _apertura;
 
-  Future<Database> get baseDatos async {
+  Future<Database> get baseDatos {
     final existente = _baseDatos;
-    if (existente != null) return existente;
+    if (existente != null) return Future.value(existente);
+    // Evita abrir la base dos veces si llegan varias muestras a la vez.
+    return _apertura ??= _abrir();
+  }
+
+  Future<Database> _abrir() async {
     final ruta = join(await getDatabasesPath(), 'rastro_local.db');
-    return _baseDatos = await openDatabase(
+    final db = await openDatabase(
       ruta,
-      version: 2,
+      version: 3,
       onCreate: (db, version) async {
         await db.execute('''
           CREATE TABLE locations (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
+            sample_id TEXT,
             device_id TEXT NOT NULL,
             latitude REAL NOT NULL,
             longitude REAL NOT NULL,
@@ -27,12 +34,19 @@ class BaseDatosLocal {
             accuracy REAL NOT NULL,
             speed REAL NOT NULL DEFAULT 0,
             heading REAL NOT NULL DEFAULT 0,
+            altitude REAL,
             battery INTEGER,
             sync_status TEXT NOT NULL DEFAULT 'pending'
           )
         ''');
         await db.execute(
           'CREATE INDEX idx_locations_timestamp ON locations(timestamp)',
+        );
+        await db.execute(
+          'CREATE INDEX idx_locations_sync ON locations(sync_status)',
+        );
+        await db.execute(
+          'CREATE INDEX idx_locations_sample ON locations(sample_id)',
         );
       },
       onUpgrade: (db, oldVersion, newVersion) async {
@@ -45,8 +59,32 @@ class BaseDatosLocal {
           );
           await db.execute('ALTER TABLE locations ADD COLUMN battery INTEGER');
         }
+        if (oldVersion < 3) {
+          await db.execute('ALTER TABLE locations ADD COLUMN sample_id TEXT');
+          await db.execute('ALTER TABLE locations ADD COLUMN altitude REAL');
+          await db.execute(
+            "UPDATE locations SET sample_id = device_id || '-' || id WHERE sample_id IS NULL",
+          );
+          await db.execute(
+            'CREATE INDEX IF NOT EXISTS idx_locations_sync ON locations(sync_status)',
+          );
+          await db.execute(
+            'CREATE INDEX IF NOT EXISTS idx_locations_sample ON locations(sample_id)',
+          );
+        }
       },
     );
+    // Limpieza: las muestras ya sincronizadas de hace más de 7 días sobran.
+    final limite = DateTime.now()
+        .subtract(const Duration(days: 7))
+        .toUtc()
+        .toIso8601String();
+    await db.delete(
+      'locations',
+      where: 'sync_status = ? AND timestamp < ?',
+      whereArgs: ['synced', limite],
+    );
+    return _baseDatos = db;
   }
 
   Future<int> insertarUbicacion(UbicacionLocal ubicacion) async {
@@ -54,7 +92,7 @@ class BaseDatosLocal {
     return db.insert('locations', ubicacion.toMap());
   }
 
-  Future<List<UbicacionLocal>> pendientes({int limite = 500}) async {
+  Future<List<UbicacionLocal>> pendientes({int limite = 200}) async {
     final db = await baseDatos;
     final filas = await db.query(
       'locations',
@@ -66,18 +104,34 @@ class BaseDatosLocal {
     return filas.map(UbicacionLocal.fromMap).toList();
   }
 
-  Future<void> marcarSincronizada(int id) async {
+  Future<int> contarPendientes() async {
     final db = await baseDatos;
-    await db.update(
-      'locations',
-      {'sync_status': 'synced'},
-      where: 'id = ?',
-      whereArgs: [id],
-    );
+    return Sqflite.firstIntValue(
+          await db.rawQuery(
+            "SELECT COUNT(*) FROM locations WHERE sync_status = 'pending'",
+          ),
+        ) ??
+        0;
+  }
+
+  Future<void> marcarSincronizadas(List<String> sampleIds) async {
+    if (sampleIds.isEmpty) return;
+    final db = await baseDatos;
+    final batch = db.batch();
+    for (final sampleId in sampleIds) {
+      batch.update(
+        'locations',
+        {'sync_status': 'synced'},
+        where: 'sample_id = ?',
+        whereArgs: [sampleId],
+      );
+    }
+    await batch.commit(noResult: true);
   }
 
   Future<void> cerrar() async {
     await _baseDatos?.close();
     _baseDatos = null;
+    _apertura = null;
   }
 }

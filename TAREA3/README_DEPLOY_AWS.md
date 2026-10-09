@@ -1,5 +1,45 @@
 # Despliegue de Rastro en AWS
 
+## Despliegue actual (EC2 + PM2 + Nginx)
+
+| Elemento | Valor |
+| --- | --- |
+| Panel | `http://18.191.113.248/movimiento/` |
+| API | `http://18.191.113.248/movimiento/api` |
+| WebSocket | `ws://18.191.113.248/movimiento/ws` |
+| Proceso PM2 | `movimiento-api` (puerto interno 8080) |
+
+La app ya trae por defecto la URL de AWS y la clave CARTO, así que basta con:
+
+```powershell
+flutter build apk --release
+```
+
+(Se pueden sobrescribir con `--dart-define=API_URL=...` y `--dart-define=CARTO_API_KEY=...`).
+
+Actualizar el servidor:
+
+```bash
+cd ~/SISTEMASEMBEBIDOS && git pull
+cd TAREA3/backend && npm install --omit=dev
+pm2 restart movimiento-api
+```
+
+La configuración de Nginx necesaria (WebSocket con `Upgrade`, sin buffering y
+timeouts largos) está en `backend/nginx-movimiento.conf`.
+
+### Tiempo real
+
+- GPS sin filtro de distancia, intervalo configurable (250–2000 ms).
+- Filtro de Kalman + rechazo de saltos imposibles y lecturas imprecisas.
+- WebSocket persistente: cada muestra se envía apenas llega, el servidor la
+  confirma (`location.accepted`) y la difunde al panel (`location.updated`).
+- Ping cada 2 s para medir RTT y sincronizar el reloj (la latencia que reporta
+  `/api/metrics` usa el reloj del servidor).
+- Ubicaciones guardadas en `data/movimiento.locations.ndjson` (append-only);
+  usuarios y dispositivos en `data/movimiento.json`. El formato anterior se
+  migra automáticamente al arrancar.
+
 ## Arquitectura
 
 - **Flutter Android/iOS:** captura GPS solo después de login, consentimiento y permiso del sistema.
@@ -113,7 +153,9 @@ El índice compuesto `deviceId + timestamp` permite recuperar el último punto y
   certificación de rendimiento: la prueba de campo debe ejecutarse durante al
   menos 10 minutos y conservar sus datos.
 
-Todos los endpoints de dispositivos requieren `Authorization: Bearer JWT` y verifican que el dispositivo pertenezca al usuario autenticado.
+Además: `POST /api/devices/:deviceId/locations/batch` (cola offline) y `GET /api/time`.
+
+Importante: en esta versión académica los endpoints de dispositivos **no** exigen JWT (cualquiera con la URL puede ver las ubicaciones). Para uso con personas reales hay que añadir autenticación y HTTPS/WSS.
 
 ## AWS paso a paso
 

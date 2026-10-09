@@ -1,254 +1,399 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
-import 'dart:math';
+import 'dart:math' as math;
 
-import 'package:battery_plus/battery_plus.dart';
 import 'package:device_info_plus/device_info_plus.dart';
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:web_socket_channel/io.dart';
-import 'package:web_socket_channel/web_socket_channel.dart';
 
 import '../modelos/ubicacion_local.dart';
 import 'base_datos_local.dart';
 
+enum EstadoEnlace { desconectado, conectando, conectado }
+
+/// Estado del enlace con el servidor, para mostrarlo en pantalla.
+@immutable
+class EstadoRemoto {
+  const EstadoRemoto({
+    this.enlace = EstadoEnlace.desconectado,
+    this.rttMs,
+    this.latenciaAckMs,
+    this.pendientes = 0,
+  });
+
+  final EstadoEnlace enlace;
+
+  /// Tiempo de ida y vuelta del WebSocket.
+  final int? rttMs;
+
+  /// Tiempo desde que se envió la última muestra hasta su confirmación.
+  final int? latenciaAckMs;
+
+  /// Muestras guardadas localmente que aún no llegaron al servidor.
+  final int pendientes;
+
+  EstadoRemoto copyWith({
+    EstadoEnlace? enlace,
+    int? rttMs,
+    int? latenciaAckMs,
+    int? pendientes,
+  }) => EstadoRemoto(
+    enlace: enlace ?? this.enlace,
+    rttMs: rttMs ?? this.rttMs,
+    latenciaAckMs: latenciaAckMs ?? this.latenciaAckMs,
+    pendientes: pendientes ?? this.pendientes,
+  );
+}
+
+/// Canal de tiempo real con el servidor.
+///
+/// - WebSocket persistente (sin handshake HTTP por muestra) con TCP_NODELAY.
+/// - Ping cada 2 s: mide RTT y estima el desfase de reloj (estilo NTP) para
+///   que la latencia que calcula el servidor sea real.
+/// - Cada muestra se guarda en SQLite; si no hay red queda pendiente y se
+///   envía en lote al reconectar.
 class SeguimientoRemoto {
   SeguimientoRemoto({
     this.baseUrl = const String.fromEnvironment(
       'API_URL',
-      defaultValue: 'http://10.0.2.2:8080/api',
+      defaultValue: 'http://18.191.113.248/movimiento/api',
     ),
   });
 
   final String baseUrl;
-  final _bateria = Battery();
+  final estado = ValueNotifier(const EstadoRemoto());
   final _informacionDispositivo = DeviceInfoPlugin();
-  String? _token;
+  final _enviadas = <String, int>{};
+  final _muestrasReloj = <(int rtt, int offset)>[];
+
+  IOWebSocketChannel? _socket;
+  StreamSubscription<dynamic>? _socketSuscripcion;
+  Timer? _temporizadorPing;
+  Timer? _temporizadorReconexion;
+  Timer? _temporizadorCola;
+  Completer<void>? _loteEnCurso;
+  bool _conectado = false;
+  bool _cerrando = true;
+  bool _vaciandoCola = false;
+  bool _httpEnCurso = false;
+  bool _desechado = false;
+  int _intentos = 0;
+  int _offsetRelojMs = 0;
+
   String? _deviceId;
-  WebSocketChannel? _socket;
-  StreamSubscription<dynamic>? _socketSubscription;
-  Timer? _reconnectTimer;
-  bool _socketReady = false;
-  bool _closing = false;
-  final _pendingAcks = <String, int>{};
+  String _nombre = 'Mi celular';
+  String _version = '1.0.0';
+  int? _bateria;
 
-  bool get estaAutorizado => _token != null;
+  /// Diferencia (servidor - teléfono) en milisegundos.
+  int get offsetRelojMs => _offsetRelojMs;
 
-  Future<void> cargarSesion() async {
-    final preferencias = await SharedPreferences.getInstance();
-    _token = preferencias.getString('seguimiento_token');
-    _deviceId = preferencias.getString('seguimiento_device_id');
+  bool get conectado => _conectado;
+
+  set bateria(int? valor) => _bateria = valor;
+
+  Future<void> iniciar({
+    required String deviceId,
+    required String nombre,
+    required String version,
+  }) async {
+    _deviceId = deviceId;
+    _nombre = nombre;
+    _version = version;
+    _cerrando = false;
+    _intentos = 0;
+    _temporizadorCola?.cancel();
+    _temporizadorCola = Timer.periodic(
+      const Duration(seconds: 15),
+      (_) => unawaited(_vaciarCola()),
+    );
+    await _conectar();
   }
 
-  Future<void> iniciarTiempoReal() async {
-    _closing = false;
-    await _conectarSocket();
-  }
-
-  Future<void> _conectarSocket() async {
-    if (_closing || _socketReady || _deviceId == null) return;
+  Uri get _uriSocket {
     final base = Uri.parse(baseUrl);
-    final apiPrefix = base.path.endsWith('/api')
+    final prefijo = base.path.endsWith('/api')
         ? base.path.substring(0, base.path.length - 4)
         : '';
-    final uri = Uri(
+    return Uri(
       scheme: base.scheme == 'https' ? 'wss' : 'ws',
       host: base.host,
       port: base.hasPort ? base.port : null,
-      path: '${apiPrefix.isEmpty ? '' : apiPrefix}/ws',
-      queryParameters: _token == null ? null : {'token': _token!},
+      path: '$prefijo/ws',
     );
+  }
+
+  Future<void> _conectar() async {
+    if (_cerrando || _conectado || _socket != null || _deviceId == null) return;
+    _actualizar(enlace: EstadoEnlace.conectando);
     try {
-      final socket = IOWebSocketChannel.connect(uri);
-      await socket.ready;
+      final socket = IOWebSocketChannel.connect(
+        _uriSocket,
+        pingInterval: const Duration(seconds: 10),
+        connectTimeout: const Duration(seconds: 5),
+      );
       _socket = socket;
-      _socketReady = true;
-      _socketSubscription = socket.stream.listen(
-        _recibirSocket,
+      await socket.ready;
+      if (_cerrando) {
+        await socket.sink.close();
+        return;
+      }
+      _conectado = true;
+      _intentos = 0;
+      _socketSuscripcion = socket.stream.listen(
+        _recibir,
         onDone: _socketCerrado,
         onError: (_) => _socketCerrado(),
         cancelOnError: true,
       );
+      final (plataforma, modelo) = await _datosDispositivo();
+      _enviarMensaje({
+        'type': 'hello',
+        'data': {
+          'deviceId': _deviceId,
+          'name': _nombre,
+          'platform': plataforma,
+          'model': modelo,
+          'appVersion': _version,
+          'battery': _bateria,
+        },
+      });
+      _actualizar(enlace: EstadoEnlace.conectado);
+      _ping();
+      _temporizadorPing?.cancel();
+      _temporizadorPing = Timer.periodic(
+        const Duration(seconds: 2),
+        (_) => _ping(),
+      );
+      unawaited(_vaciarCola());
     } catch (_) {
-      _programarReconexion();
+      _socket = null;
+      _socketCerrado();
     }
   }
 
-  void _recibirSocket(dynamic raw) {
-    final mensaje = jsonDecode(raw as String) as Map<String, dynamic>;
-    if (mensaje['type'] == 'location.accepted') {
-      final sampleId = mensaje['data']['sampleId'] as String?;
-      final localId = sampleId == null ? null : _pendingAcks.remove(sampleId);
-      if (localId != null) {
-        unawaited(BaseDatosLocal.instancia.marcarSincronizada(localId));
-      }
+  void _ping() {
+    _enviarMensaje({'type': 'ping', 't': DateTime.now().millisecondsSinceEpoch});
+  }
+
+  void _recibir(dynamic crudo) {
+    if (crudo is! String) return;
+    final Map<String, dynamic> mensaje;
+    try {
+      mensaje = jsonDecode(crudo) as Map<String, dynamic>;
+    } catch (_) {
+      return;
     }
+    final ahora = DateTime.now().millisecondsSinceEpoch;
+    switch (mensaje['type']) {
+      case 'pong':
+        final t0 = (mensaje['t'] as num?)?.toInt();
+        final servidor = (mensaje['serverTime'] as num?)?.toInt();
+        if (t0 == null || servidor == null) return;
+        final rtt = ahora - t0;
+        _muestrasReloj.add((rtt, servidor - (t0 + rtt ~/ 2)));
+        if (_muestrasReloj.length > 8) _muestrasReloj.removeAt(0);
+        // La muestra con menor RTT es la que mejor estima el desfase.
+        final mejor = _muestrasReloj.reduce((a, b) => a.$1 <= b.$1 ? a : b);
+        _offsetRelojMs = mejor.$2;
+        _actualizar(rttMs: rtt);
+      case 'location.accepted':
+        final sampleId = (mensaje['data'] as Map?)?['sampleId'] as String?;
+        if (sampleId == null) return;
+        final enviado = _enviadas.remove(sampleId);
+        unawaited(_confirmar([sampleId]));
+        if (enviado != null) _actualizar(latenciaAckMs: ahora - enviado);
+      case 'locations.accepted':
+        final ids = ((mensaje['data'] as Map?)?['sampleIds'] as List?)
+                ?.whereType<String>()
+                .toList() ??
+            const <String>[];
+        unawaited(
+          _confirmar(ids).whenComplete(() {
+            if (_loteEnCurso?.isCompleted == false) _loteEnCurso!.complete();
+          }),
+        );
+    }
+  }
+
+  Future<void> _confirmar(List<String> sampleIds) async {
+    await BaseDatosLocal.instancia.marcarSincronizadas(sampleIds);
   }
 
   void _socketCerrado() {
-    _socketReady = false;
+    _conectado = false;
+    _temporizadorPing?.cancel();
+    unawaited(_socketSuscripcion?.cancel());
+    _socketSuscripcion = null;
     _socket = null;
-    _socketSubscription = null;
+    _enviadas.clear();
+    if (_loteEnCurso?.isCompleted == false) {
+      _loteEnCurso!.completeError(const SocketException('Socket cerrado'));
+    }
+    _actualizar(enlace: EstadoEnlace.desconectado);
     _programarReconexion();
   }
 
   void _programarReconexion() {
-    if (_closing || _reconnectTimer?.isActive == true) return;
-    _reconnectTimer = Timer(const Duration(seconds: 3), _conectarSocket);
-  }
-
-  Future<bool> iniciarSesion(String correo, String contrasena) async {
-    final respuesta = await http.post(
-      Uri.parse('$baseUrl/auth/login'),
-      headers: {'Content-Type': 'application/json'},
-      body: jsonEncode({'email': correo, 'password': contrasena}),
+    if (_cerrando || _temporizadorReconexion?.isActive == true) return;
+    // Reintento rápido (0.5 s, 1 s, 2 s... hasta 5 s).
+    final espera = math.min(5000, 500 * (1 << math.min(_intentos, 4)));
+    _intentos++;
+    _temporizadorReconexion = Timer(
+      Duration(milliseconds: espera),
+      () => unawaited(_conectar()),
     );
-    if (respuesta.statusCode != 200) return false;
-    final datos = jsonDecode(respuesta.body) as Map<String, dynamic>;
-    _token = datos['token'] as String;
-    final preferencias = await SharedPreferences.getInstance();
-    await preferencias.setString('seguimiento_token', _token!);
-    return true;
   }
 
-  Future<void> cerrarSesion() async {
-    _token = null;
-    final preferencias = await SharedPreferences.getInstance();
-    await preferencias.remove('seguimiento_token');
-  }
-
-  Future<void> registrarDispositivo({
-    required String nombre,
-    required String version,
-  }) async {
-    final preferencias = await SharedPreferences.getInstance();
-    _deviceId ??= preferencias.getString('device_id');
-    _deviceId ??= preferencias.getString('seguimiento_device_id');
-    _deviceId ??= _generarId();
-    await preferencias.setString('seguimiento_device_id', _deviceId!);
-    await preferencias.setString('device_id', _deviceId!);
-    final datos = await _datosDispositivo();
-    final respuesta = await http.post(
-      Uri.parse('$baseUrl/devices'),
-      headers: _headers(),
-      body: jsonEncode({
-        'deviceId': _deviceId,
-        'name': nombre,
-        'platform': datos.$1,
-        'appVersion': version,
-        'model': datos.$2,
-        'battery': await _bateria.batteryLevel,
-      }),
-    );
-    if (respuesta.statusCode >= 400) {
-      throw Exception('No se pudo registrar el dispositivo');
-    }
-  }
-
-  Future<void> enviarUbicacion({
-    required double latitude,
-    required double longitude,
-    required double accuracy,
-    required double speed,
-    required double heading,
-    required int battery,
-    required DateTime timestamp,
-    required int localId,
-  }) async {
-    final deviceId = _deviceId;
-    if (deviceId == null) return;
-    final datos = {
-      'deviceId': deviceId,
-      'sampleId': '$deviceId-$localId-${timestamp.microsecondsSinceEpoch}',
-      'latitude': latitude,
-      'longitude': longitude,
-      'accuracy': accuracy,
-      'speed': speed,
-      'heading': heading,
-      'battery': battery,
-      'timestamp': timestamp.toUtc().toIso8601String(),
-    };
-    if (_socketReady) {
-      try {
-        _pendingAcks[datos['sampleId'] as String] = localId;
-        _socket!.sink.add(jsonEncode({'type': 'location', 'data': datos}));
-        return;
-      } catch (_) {
-        _socketCerrado();
-      }
-    }
+  bool _enviarMensaje(Map<String, Object?> mensaje) {
+    final socket = _socket;
+    if (!_conectado || socket == null) return false;
     try {
-      final respuesta = await http.post(
-        Uri.parse('$baseUrl/devices/$deviceId/locations'),
-        headers: _headers(),
-        body: jsonEncode(datos),
-      );
-      if (respuesta.statusCode >= 400) {
-        throw Exception('HTTP ${respuesta.statusCode}');
-      }
-      await _enviarPendientes(deviceId);
-      await BaseDatosLocal.instancia.marcarSincronizada(localId);
+      socket.sink.add(jsonEncode(mensaje));
+      return true;
     } catch (_) {
-      _programarReconexion();
+      _socketCerrado();
+      return false;
     }
   }
 
-  Future<void> _enviarPendientes(String deviceId) async {
-    final pendientes = await BaseDatosLocal.instancia.pendientes(limite: 50);
-    for (final pendiente in pendientes) {
-      final respuesta = await http.post(
-        Uri.parse('$baseUrl/devices/$deviceId/locations'),
-        headers: _headers(),
-        body: jsonEncode(_datosPendiente(pendiente)),
-      );
-      if (respuesta.statusCode < 400 && pendiente.id != null) {
-        await BaseDatosLocal.instancia.marcarSincronizada(pendiente.id!);
+  /// Envía una muestra en vivo. Debe llamarse con la muestra ya guardada en
+  /// la base local (si falla, queda pendiente y se reenvía después).
+  void enviar(UbicacionLocal ubicacion) {
+    final enviado = _enviarMensaje({
+      'type': 'location',
+      'data': ubicacion.toJsonServidor(),
+    });
+    if (enviado) {
+      _enviadas[ubicacion.sampleId] = DateTime.now().millisecondsSinceEpoch;
+      if (_enviadas.length > 200) _enviadas.remove(_enviadas.keys.first);
+      return;
+    }
+    // Sin WebSocket: intento HTTP (uno a la vez para no saturar la red).
+    unawaited(_enviarHttp(ubicacion));
+  }
+
+  Future<void> _enviarHttp(UbicacionLocal ubicacion) async {
+    if (_httpEnCurso || _cerrando) return;
+    _httpEnCurso = true;
+    try {
+      final respuesta = await http
+          .post(
+            Uri.parse('$baseUrl/devices/${ubicacion.deviceId}/locations'),
+            headers: const {'Content-Type': 'application/json'},
+            body: jsonEncode(ubicacion.toJsonServidor()),
+          )
+          .timeout(const Duration(seconds: 3));
+      if (respuesta.statusCode < 400) await _confirmar([ubicacion.sampleId]);
+    } catch (_) {
+      // Queda pendiente en SQLite.
+    } finally {
+      _httpEnCurso = false;
+      unawaited(_refrescarPendientes());
+    }
+  }
+
+  /// Envía en lotes las muestras que no llegaron al servidor.
+  Future<void> _vaciarCola() async {
+    if (_vaciandoCola || !_conectado) {
+      await _refrescarPendientes();
+      return;
+    }
+    _vaciandoCola = true;
+    try {
+      while (_conectado) {
+        final pendientes = await BaseDatosLocal.instancia.pendientes(limite: 200);
+        // Se excluyen las muestras en vivo que esperan confirmación.
+        final lote = pendientes
+            .where((item) => !_enviadas.containsKey(item.sampleId))
+            .toList();
+        if (lote.isEmpty) break;
+        _loteEnCurso = Completer<void>();
+        if (!_enviarMensaje({
+          'type': 'locations',
+          'data': lote.map((item) => item.toJsonServidor(enVivo: false)).toList(),
+        })) {
+          break;
+        }
+        await _loteEnCurso!.future.timeout(const Duration(seconds: 10));
+        if (pendientes.length < 200) break;
       }
+    } catch (_) {
+      // Se reintenta en el próximo ciclo o al reconectar.
+    } finally {
+      _loteEnCurso = null;
+      _vaciandoCola = false;
+      await _refrescarPendientes();
     }
   }
 
-  Map<String, dynamic> _datosPendiente(UbicacionLocal ubicacion) => {
-    'sampleId':
-        '${ubicacion.deviceId}-${ubicacion.id}-${ubicacion.timestamp.microsecondsSinceEpoch}',
-    'latitude': ubicacion.latitude,
-    'longitude': ubicacion.longitude,
-    'accuracy': ubicacion.accuracy,
-    'speed': ubicacion.speed,
-    'heading': ubicacion.heading,
-    'battery': ubicacion.battery,
-    'timestamp': ubicacion.timestamp.toUtc().toIso8601String(),
-  };
-
-  Future<void> cerrar() async {
-    _closing = true;
-    _reconnectTimer?.cancel();
-    await _socketSubscription?.cancel();
-    await _socket?.sink.close();
-    _socket = null;
-    _socketReady = false;
+  Future<void> _refrescarPendientes() async {
+    try {
+      final cantidad = await BaseDatosLocal.instancia.contarPendientes();
+      _actualizar(pendientes: cantidad);
+    } catch (_) {}
   }
 
-  Map<String, String> _headers() => {'Content-Type': 'application/json'};
+  void _actualizar({
+    EstadoEnlace? enlace,
+    int? rttMs,
+    int? latenciaAckMs,
+    int? pendientes,
+  }) {
+    if (_desechado) return;
+    estado.value = estado.value.copyWith(
+      enlace: enlace,
+      rttMs: rttMs,
+      latenciaAckMs: latenciaAckMs,
+      pendientes: pendientes,
+    );
+  }
+
+  /// Cierra el canal (al detener el recorrido).
+  Future<void> detener() async {
+    // Último intento de enviar lo pendiente antes de cerrar.
+    if (_conectado) {
+      try {
+        await _vaciarCola().timeout(const Duration(seconds: 3));
+      } catch (_) {}
+    }
+    _cerrando = true;
+    _temporizadorReconexion?.cancel();
+    _temporizadorPing?.cancel();
+    _temporizadorCola?.cancel();
+    final socket = _socket;
+    _socket = null;
+    _conectado = false;
+    await _socketSuscripcion?.cancel();
+    _socketSuscripcion = null;
+    await socket?.sink.close();
+    _actualizar(enlace: EstadoEnlace.desconectado);
+  }
+
+  void dispose() {
+    _desechado = true;
+    _cerrando = true;
+    unawaited(detener());
+    estado.dispose();
+  }
+
+  (String, String)? _cacheDispositivo;
 
   Future<(String, String)> _datosDispositivo() async {
-    if (Platform.isAndroid) {
-      final info = await _informacionDispositivo.androidInfo;
-      return ('android', '${info.manufacturer} ${info.model}');
-    }
-    if (Platform.isIOS) {
-      final info = await _informacionDispositivo.iosInfo;
-      return ('ios', info.utsname.machine);
-    }
-    return (Platform.operatingSystem, 'dispositivo');
-  }
-
-  String _generarId() {
-    final aleatorio = Random.secure();
-    final partes = List.generate(
-      4,
-      (_) => aleatorio.nextInt(1 << 32).toRadixString(16).padLeft(8, '0'),
-    );
-    return '${DateTime.now().microsecondsSinceEpoch}-${partes.join('-')}';
+    final cache = _cacheDispositivo;
+    if (cache != null) return cache;
+    try {
+      if (Platform.isAndroid) {
+        final info = await _informacionDispositivo.androidInfo;
+        return _cacheDispositivo = ('android', '${info.manufacturer} ${info.model}');
+      }
+      if (Platform.isIOS) {
+        final info = await _informacionDispositivo.iosInfo;
+        return _cacheDispositivo = ('ios', info.utsname.machine);
+      }
+    } catch (_) {}
+    return _cacheDispositivo = (Platform.operatingSystem, 'dispositivo');
   }
 }
