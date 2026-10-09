@@ -5,6 +5,7 @@ import 'dart:math' as math;
 import 'package:battery_plus/battery_plus.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:latlong2/latlong.dart';
@@ -19,6 +20,16 @@ import 'servicios/filtro_gps.dart';
 import 'servicios/seguimiento_remoto.dart';
 
 const _versionApp = '1.1.0';
+const _canalPantalla = MethodChannel('movimiento/pantalla');
+
+/// Mantiene la pantalla encendida mientras se registra (solo Android).
+Future<void> _mantenerPantallaEncendida(bool activar) async {
+  try {
+    await _canalPantalla.invokeMethod<void>('mantenerEncendida', activar);
+  } catch (_) {
+    // Otras plataformas o tests.
+  }
+}
 
 void main() {
   runApp(const AplicacionMovimiento());
@@ -201,6 +212,7 @@ class _PantallaMovimientoState extends State<PantallaMovimiento>
   bool _pausado = false;
   bool _seguir = true;
   bool _nuevoSegmento = true;
+  bool _usarServicioPrimerPlano = true;
   String _deviceId = '';
   int _intervaloMilisegundos = 500;
   String? _mensaje;
@@ -375,6 +387,7 @@ class _PantallaMovimientoState extends State<PantallaMovimiento>
       ),
     );
     _suscribirSensores();
+    unawaited(_mantenerPantallaEncendida(true));
 
     _temporizadorBateria?.cancel();
     _temporizadorBateria = Timer.periodic(const Duration(seconds: 30), (
@@ -405,14 +418,17 @@ class _PantallaMovimientoState extends State<PantallaMovimiento>
         // 0 m: antes con 5 m, caminando solo llegaba un punto cada 3-4 s.
         distanceFilter: 0,
         intervalDuration: Duration(milliseconds: _intervaloMilisegundos),
-        foregroundNotificationConfig: const ForegroundNotificationConfig(
-          notificationTitle: 'Movimiento GPS está registrando tu recorrido',
-          notificationText: 'Seguimiento en tiempo real activo',
-          notificationChannelName: 'Seguimiento de movimiento',
-          setOngoing: true,
-          enableWakeLock: true,
-          enableWifiLock: true,
-        ),
+        foregroundNotificationConfig: _usarServicioPrimerPlano
+            ? const ForegroundNotificationConfig(
+                notificationTitle:
+                    'Movimiento GPS está registrando tu recorrido',
+                notificationText: 'Seguimiento en tiempo real activo',
+                notificationChannelName: 'Seguimiento de movimiento',
+                setOngoing: true,
+                enableWakeLock: true,
+                enableWifiLock: true,
+              )
+            : null,
       );
     }
     if (defaultTargetPlatform == TargetPlatform.iOS) {
@@ -439,10 +455,42 @@ class _PantallaMovimientoState extends State<PantallaMovimiento>
     _sensorSuscripcion = userAccelerometerEventStream(
       samplingPeriod: SensorInterval.uiInterval,
     ).listen(_leerAcelerometro, onError: (_) {});
+    unawaited(_primeraPosicion());
+  }
+
+  /// Pide una lectura inmediata para no depender solo del flujo continuo
+  /// (algunos equipos tardan varios segundos en emitir la primera muestra).
+  Future<void> _primeraPosicion() async {
+    try {
+      final posicion = await Geolocator.getCurrentPosition(
+        locationSettings: const LocationSettings(
+          accuracy: LocationAccuracy.best,
+          timeLimit: Duration(seconds: 15),
+        ),
+      );
+      if (_registrando && !_pausado && _esperandoFix) {
+        _agregarUbicacion(posicion);
+      }
+    } catch (_) {
+      // El flujo continuo seguirá intentándolo.
+    }
   }
 
   void _errorGps(Object error) {
     if (!mounted) return;
+    // Si el servicio en primer plano falla (restricciones del fabricante),
+    // se reintenta una vez sin él para no quedarse sin GPS.
+    if (_usarServicioPrimerPlano &&
+        error is! LocationServiceDisabledException &&
+        error is! PermissionDeniedException) {
+      _usarServicioPrimerPlano = false;
+      if (_registrando && !_pausado) _suscribirSensores();
+      setState(
+        () => _mensaje =
+            'GPS en modo básico: mantén la app abierta durante el recorrido.',
+      );
+      return;
+    }
     setState(() {
       _mensaje = switch (error) {
         LocationServiceDisabledException() =>
@@ -472,9 +520,10 @@ class _PantallaMovimientoState extends State<PantallaMovimiento>
     _ultimoFix = ahora;
 
     // Edad de la lectura. Si el reloj del GPS y el del sistema no coinciden
-    // (diferencia negativa o enorme) se usa el instante de recepción.
+    // (diferencia negativa o enorme) se usa el instante de recepción. Las
+    // lecturas que Android entrega en lote conservan su hora real.
     var edad = ahora.difference(posicion.timestamp);
-    if (edad.isNegative || edad > const Duration(seconds: 10)) {
+    if (edad.isNegative || edad > const Duration(minutes: 5)) {
       edad = Duration.zero;
     }
 
@@ -648,6 +697,7 @@ class _PantallaMovimientoState extends State<PantallaMovimiento>
     _temporizadorBateria?.cancel();
     _temporizadorEdad?.cancel();
     _animacion.stop();
+    unawaited(_mantenerPantallaEncendida(false));
     unawaited(_seguimientoRemoto.detener());
     final puntos = _todosLosPuntos;
     if (puntos.isNotEmpty) {
@@ -769,7 +819,7 @@ class _PantallaMovimientoState extends State<PantallaMovimiento>
                     initialCenter: _ubicacionInicial,
                     initialZoom: 15,
                     minZoom: 3,
-                    maxZoom: 20,
+                    maxZoom: 19,
                     // Sin rotación: el mapa queda siempre con el norte arriba
                     // y la flecha indica el rumbo real.
                     interactionOptions: const InteractionOptions(
@@ -783,7 +833,11 @@ class _PantallaMovimientoState extends State<PantallaMovimiento>
                     TileLayer(
                       urlTemplate: _mapTileUrl,
                       retinaMode: RetinaMode.isHighDensity(context),
-                      maxNativeZoom: 20,
+                      // CARTO solo publica mosaicos hasta z18 (z19+ da 403 y
+                      // dejaba el mapa en blanco); más cerca se amplía el z18.
+                      maxNativeZoom: 18,
+                      evictErrorTileStrategy:
+                          EvictErrorTileStrategy.notVisibleRespectMargin,
                       // Precarga mosaicos alrededor para no ver huecos grises al moverse.
                       keepBuffer: 4,
                       panBuffer: 1,

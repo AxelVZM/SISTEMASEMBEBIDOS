@@ -81,7 +81,7 @@
 
     const map = L.map('map', { zoomControl: true }).setView([-13.53195, -71.96746], 14);
     L.tileLayer(`https://basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png?key=${CARTO_KEY}`, {
-      maxZoom: 20, maxNativeZoom: 20,
+      maxZoom: 20, maxNativeZoom: 18, // CARTO no publica z19+ (403)
       attribution: '&copy; OpenStreetMap contributors &copy; CARTO',
     }).addTo(map);
     // Si el usuario arrastra el mapa se desactiva el seguimiento automático.

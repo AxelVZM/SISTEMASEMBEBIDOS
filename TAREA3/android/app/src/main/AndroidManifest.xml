@@ -19,6 +19,14 @@
     <uses-permission
         android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
 
+    <!-- Necesario para enableWakeLock / enableWifiLock del servicio GPS:
+         sin él Android bloquea el servicio y no llega ninguna ubicación -->
+    <uses-permission
+        android:name="android.permission.WAKE_LOCK" />
+
+    <uses-permission
+        android:name="android.permission.ACCESS_WIFI_STATE" />
+
     <!-- PERMISO DE NOTIFICACIONES -->
     <uses-permission
         android:name="android.permission.POST_NOTIFICATIONS" />

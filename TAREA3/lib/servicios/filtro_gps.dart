@@ -118,10 +118,10 @@ class FiltroGps {
     // Si la lectura se aleja mucho de la estimación, el teléfono se está
     // moviendo aunque no reporte velocidad (proveedor sin Doppler).
     final quieto = velocidadValida < 0.3 &&
-        distancia < math.max(6.0, precisionValida * 1.5);
+        distancia < math.max(5.0, precisionValida);
     final q = quieto
-        ? 0.8
-        : math.max(ruidoProcesoMinimo, velocidadValida * 1.5);
+        ? 1.5
+        : math.max(ruidoProcesoMinimo, velocidadValida * 2);
     _varianza += dtMs * q * q / 1000;
     _tiempoMs = tiempoMs;
 
@@ -137,9 +137,10 @@ class FiltroGps {
     final desplazamiento = _distanciaMetros(latAnterior, lngAnterior, _lat!, _lng!);
     // En movimiento si el GNSS reporta velocidad, o si (sin velocidad
     // disponible) el desplazamiento supera claramente el ruido.
+    final sinVelocidad = velocidadValida < 0.3;
     final enMovimiento = velocidadValida > 0.7 ||
-        (quieto && desplazamiento > math.max(3.0, precisionValida)) ||
-        (!quieto && desplazamiento > math.max(2.0, precisionValida * 0.5));
+        (sinVelocidad && desplazamiento > math.max(4.0, precisionValida * 0.7)) ||
+        (!sinVelocidad && desplazamiento > math.max(2.0, precisionValida * 0.5));
     double? rumboCalculado;
     if (velocidadValida > 1.0 && rumbo.isFinite && rumbo >= 0) {
       rumboCalculado = rumbo;
