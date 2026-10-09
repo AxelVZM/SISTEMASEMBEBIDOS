@@ -8,12 +8,15 @@ Uso (como usuario ubuntu, SIN sudo, después de `git pull`):
 Qué hace:
   1. Respalda la carpeta data/ del backend.
   2. Instala dependencias (npm install --omit=dev).
-  3. Busca la configuración de Nginx que contiene /movimiento, la respalda y
-     reemplaza SOLO los bloques `location /movimiento...` por los de
-     nginx-movimiento.conf. Los bloques de TAREA2 no se tocan.
-  4. Comprueba la configuración (nginx -t). Si falla, restaura el respaldo.
-  5. Recarga Nginx y reinicia SOLO el proceso PM2 movimiento-api.
-  6. Verifica API, Nginx y WebSocket.
+  3. Descarga el certificado SSL de AWS RDS (si falta).
+  4. Comprueba la conexión con PostgreSQL usando backend/.env. Si falla, se
+     detiene SIN reiniciar nada (el servidor actual sigue funcionando).
+  5. Migra una sola vez los datos antiguos (archivos JSON) a PostgreSQL.
+  6. Reemplaza SOLO los bloques `location /movimiento...` de Nginx por los de
+     nginx-movimiento.conf (TAREA2 no se toca) y valida con nginx -t.
+  7. Recarga Nginx.
+  8. Reinicia SOLO el proceso PM2 movimiento-api.
+  9. Verifica API, base de datos, Nginx y WebSocket.
 """
 
 import datetime
@@ -32,6 +35,7 @@ BLOQUES = os.path.join(BACKEND, 'nginx-movimiento.conf')
 PROCESO_PM2 = 'movimiento-api'
 RESPALDOS_NGINX = '/etc/nginx/respaldos-movimiento'
 FECHA = datetime.datetime.now().strftime('%Y%m%d-%H%M%S')
+URL_CERTIFICADO_RDS = 'https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem'
 
 PATRON_LOCATION = re.compile(r'^[ \t]*location\s+(?:[=~^*]+\s*)?/movimiento[^{]*\{', re.MULTILINE)
 
@@ -47,6 +51,21 @@ def ok(texto):
 def fallo(texto):
     print(f'    [ERROR] {texto}')
     sys.exit(1)
+
+
+def leer_env(ruta):
+    """Lee un archivo .env sencillo (CLAVE=valor) sin dependencias."""
+    valores = {}
+    if not os.path.exists(ruta):
+        return valores
+    with open(ruta, encoding='utf-8') as archivo:
+        for linea in archivo:
+            linea = linea.strip()
+            if not linea or linea.startswith('#') or '=' not in linea:
+                continue
+            clave, valor = linea.split('=', 1)
+            valores[clave.strip()] = valor.strip().strip('"').strip("'")
+    return valores
 
 
 def ejecutar(comando, cwd=None, permitir_error=False):
@@ -148,11 +167,62 @@ def main():
     else:
         ok('No hay carpeta data/ todavía (se creará sola)')
 
-    paso('2/6 Instalando dependencias del backend')
+    paso('2/9 Instalando dependencias del backend')
     ejecutar(['npm', 'install', '--omit=dev'], cwd=BACKEND)
     ok('npm install terminado')
 
-    paso('3/6 Configurando Nginx')
+    paso('3/9 Certificado SSL de AWS RDS')
+    entorno = leer_env(os.path.join(BACKEND, '.env'))
+    certificado = os.path.join(BACKEND, 'certs', 'rds-global-bundle.pem')
+    if entorno.get('PGSSLMODE', '').lower() == 'disable':
+        ok('Base de datos local (sin SSL): no hace falta')
+    elif os.path.exists(certificado):
+        ok('Ya estaba descargado')
+    else:
+        os.makedirs(os.path.dirname(certificado), exist_ok=True)
+        with urllib.request.urlopen(URL_CERTIFICADO_RDS, timeout=20) as respuesta:
+            contenido = respuesta.read()
+        if b'BEGIN CERTIFICATE' not in contenido:
+            fallo('La descarga del certificado de RDS no es válida.')
+        with open(certificado, 'wb') as archivo:
+            archivo.write(contenido)
+        ok(f'Descargado en {certificado}')
+
+    paso('4/9 Conexión con PostgreSQL')
+    if not (entorno.get('DATABASE_URL') or entorno.get('PGHOST')):
+        fallo(
+            'Falta la configuración de la base de datos en TAREA3/backend/.env '
+            '(PGHOST, PGUSER, PGPASSWORD, PGDATABASE). Mira .env.example. '
+            'No se reinició nada: el servidor actual sigue funcionando.'
+        )
+    prueba_bd = ejecutar(
+        ['node', '-e', "require('dotenv').config();const db=require('./db');"
+         "db.ping().then(ms=>{console.log(ms);return db.close()}).catch(e=>{console.error(e.message);process.exit(1)})"],
+        cwd=BACKEND, permitir_error=True,
+    )
+    if prueba_bd.returncode != 0:
+        print(prueba_bd.stderr.strip())
+        fallo(
+            'No se pudo conectar a PostgreSQL. Revisa PGHOST, usuario y contraseña en backend/.env '
+            '(si es RDS, que su grupo de seguridad permita el puerto 5432 desde esta EC2; si es local, '
+            'que "sudo systemctl status postgresql" esté activo). No se reinició nada.'
+        )
+    ok(f'Conectado a {entorno.get("PGHOST", "DATABASE_URL")} (ping {prueba_bd.stdout.strip()} ms)')
+
+    paso('5/9 Migrando datos antiguos a PostgreSQL')
+    marca = os.path.join(BACKEND, 'data', '.migrado-postgres')
+    if not os.path.exists(os.path.join(BACKEND, 'data', 'movimiento.json')):
+        ok('No hay datos antiguos')
+    elif os.path.exists(marca):
+        ok('Ya se habían migrado')
+    else:
+        migracion = ejecutar(['node', 'migrar_a_postgres.js'], cwd=BACKEND)
+        print('    ' + migracion.stdout.strip().replace('\n', '\n    '))
+        with open(marca, 'w', encoding='utf-8') as archivo:
+            archivo.write(FECHA)
+        ok('Migración completa (los archivos originales se conservan en data/)')
+
+    paso('6/9 Configurando Nginx')
     with open(BLOQUES, encoding='utf-8') as archivo:
         nuevos = ''.join(l for l in archivo.readlines() if not l.lstrip().startswith('#')).strip('\n') + '\n'
     ruta = buscar_config_nginx()
@@ -182,11 +252,11 @@ def main():
             fallo('nginx -t falló. Se restauró la configuración anterior; no se cambió nada.')
         ok('nginx -t correcto')
 
-    paso('4/6 Recargando Nginx')
+    paso('7/9 Recargando Nginx')
     ejecutar(['sudo', 'systemctl', 'reload', 'nginx'])
     ok('Nginx recargado (TAREA2 sigue funcionando igual)')
 
-    paso(f'5/6 Reiniciando solo {PROCESO_PM2}')
+    paso(f'8/9 Reiniciando solo {PROCESO_PM2}')
     lista = ejecutar(['pm2', 'jlist'])
     procesos = [p.get('name') for p in json.loads(lista.stdout or '[]')]
     if PROCESO_PM2 in procesos:
@@ -196,9 +266,9 @@ def main():
     ejecutar(['pm2', 'save'])
     ok(f'{PROCESO_PM2} reiniciado. Procesos PM2: {", ".join(filter(None, procesos))}')
 
-    paso('6/6 Verificando')
+    paso('9/9 Verificando')
     import time
-    time.sleep(2)
+    time.sleep(4)
     errores = 0
     for nombre, url in (
         ('API directa', 'http://127.0.0.1:8080/api/health'),

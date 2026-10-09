@@ -20,7 +20,7 @@ import 'servicios/detector_pasos.dart';
 import 'servicios/filtro_gps.dart';
 import 'servicios/seguimiento_remoto.dart';
 
-const _versionApp = '1.6.0';
+const _versionApp = '2.0.0';
 const _canalPantalla = MethodChannel('movimiento/pantalla');
 
 /// Mantiene la pantalla encendida mientras se registra (solo Android).
@@ -634,11 +634,12 @@ class _PantallaMovimientoState extends State<PantallaMovimiento> {
 
   Future<void> _guardarYEnviar(UbicacionLocal ubicacion) async {
     if (_deviceId.isEmpty) return;
-    // Primero se envía (camino crítico de latencia) y luego se persiste.
-    _seguimientoRemoto.enviar(ubicacion);
+    // Primero se guarda en SQLite (~1-3 ms) y luego se envía por POST: si no
+    // hay red, la muestra queda pendiente y viaja después en un lote.
     try {
       await _baseDatos.insertarUbicacion(ubicacion);
     } catch (_) {}
+    _seguimientoRemoto.enviar(ubicacion);
   }
 
   void _actualizarEdadFix() {
@@ -1203,7 +1204,7 @@ class _EstadoRegistro extends StatelessWidget {
                             texto,
                             if (estado.rttMs != null) 'RTT ${estado.rttMs} ms',
                             if (estado.latenciaAckMs != null)
-                              'confirmación ${estado.latenciaAckMs} ms',
+                              'guardado en BD ${estado.latenciaAckMs} ms',
                             if (estado.pendientes > 0)
                               '${estado.pendientes} en cola',
                           ].join(' · '),

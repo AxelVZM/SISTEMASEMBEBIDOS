@@ -1,7 +1,6 @@
 require('dotenv').config();
 
 const path = require('node:path');
-const fs = require('node:fs');
 const http = require('node:http');
 const express = require('express');
 const cors = require('cors');
@@ -10,120 +9,38 @@ const rateLimit = require('express-rate-limit');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const { WebSocketServer } = require('ws');
+const db = require('./db');
 
 const port = Number(process.env.PORT || 8080);
-// Un dispositivo se considera "online" si tiene socket abierto o envió datos hace poco.
+// Un dispositivo está "online" si envió algo (punto o latido) hace poco.
 const onlineWindowMs = 20 * 1000;
-// Ventana para considerar que un recorrido sigue activo (ruta mostrada en el panel).
-const activeWindowMs = 3 * 60 * 1000;
-const maxLocationsPerDevice = Number(process.env.MAX_LOCATIONS_PER_DEVICE || 50000);
+// Hueco máximo entre puntos de un mismo recorrido.
+const sessionGapMs = 3 * 60 * 1000;
 const jwtSecret = process.env.JWT_SECRET || 'development-only-secret';
 
 // ---------------------------------------------------------------------------
-// Persistencia: usuarios/dispositivos en JSON, ubicaciones en NDJSON (append-only).
-// Escribir el archivo completo en cada punto bloqueaba el event loop y generaba
-// picos de latencia; ahora cada muestra es una línea agregada de forma asíncrona.
+// Estado en memoria (caché). La fuente de verdad es PostgreSQL.
 // ---------------------------------------------------------------------------
-const dbFile = path.resolve(process.env.DB_FILE || './data/movimiento.json');
-const locationsFile = dbFile.replace(/\.json$/i, '') + '.locations.ndjson';
-fs.mkdirSync(path.dirname(dbFile), { recursive: true });
+const devices = new Map();        // deviceId -> fila de devices
+const latestByDevice = new Map(); // deviceId -> última ubicación
+const stoppedDevices = new Set(); // detuvieron el recorrido (offline inmediato)
+const recentSamples = new Set();  // sampleIds recientes (evita difundir duplicados)
+const recentOrder = [];
+const latencySamples = [];
+let discardedSamples = 0;
+let dbReady = false;
 
-const data = fs.existsSync(dbFile)
-  ? JSON.parse(fs.readFileSync(dbFile, 'utf8'))
-  : { nextUserId: 1, users: [], devices: [] };
-data.users ??= [];
-data.devices ??= [];
-data.nextUserId ??= 1;
-
-const locationsByDevice = new Map();
-const seenSamples = new Set();
-
-function indexLocation(location) {
-  let list = locationsByDevice.get(location.deviceId);
-  if (!list) locationsByDevice.set(location.deviceId, (list = []));
-  const previous = list.at(-1);
-  list.push(location);
-  // Las muestras reenviadas desde la cola offline pueden llegar desordenadas.
-  if (previous && previous.timestamp > location.timestamp) {
-    list.sort((a, b) => (a.timestamp < b.timestamp ? -1 : a.timestamp > b.timestamp ? 1 : 0));
-  }
-  if (list.length > maxLocationsPerDevice) list.splice(0, list.length - maxLocationsPerDevice);
-  if (location.sampleId) seenSamples.add(location.sampleId);
+function rememberSample(sampleId) {
+  recentSamples.add(sampleId);
+  recentOrder.push(sampleId);
+  if (recentOrder.length > 200_000) recentSamples.delete(recentOrder.shift());
 }
-
-// Migración desde el formato anterior (ubicaciones dentro del JSON principal).
-if (Array.isArray(data.locations) && data.locations.length) {
-  const lines = data.locations.map((item) => JSON.stringify({ ...item, deviceId: item.deviceId || item.device_id, device_id: undefined }));
-  fs.appendFileSync(locationsFile, lines.join('\n') + '\n');
-}
-delete data.locations;
-
-if (fs.existsSync(locationsFile)) {
-  for (const line of fs.readFileSync(locationsFile, 'utf8').split('\n')) {
-    if (!line.trim()) continue;
-    try {
-      const location = JSON.parse(line);
-      if (location.deviceId) indexLocation(location);
-    } catch { /* línea corrupta: se ignora */ }
-  }
-}
-
-let metaWriting = false;
-let metaPending = false;
-function saveMeta() {
-  if (metaWriting) { metaPending = true; return; }
-  metaWriting = true;
-  const tmp = dbFile + '.tmp';
-  fs.promises.writeFile(tmp, JSON.stringify(data))
-    .then(() => fs.promises.rename(tmp, dbFile))
-    .catch((error) => console.error('No se pudo guardar', error))
-    .finally(() => {
-      metaWriting = false;
-      if (metaPending) { metaPending = false; saveMeta(); }
-    });
-}
-saveMeta();
-
-let locationsStream = fs.createWriteStream(locationsFile, { flags: 'a' });
-// Mientras se reescribe el archivo (borrado de rutas) las nuevas líneas esperan aquí.
-let compacting = null;
-const pendingLines = [];
-
-function appendLocationLine(line) {
-  if (compacting) pendingLines.push(line);
-  else locationsStream.write(line);
-}
-
-// Elimina del archivo NDJSON todas las ubicaciones de los dispositivos indicados.
-function removeLocationsFromFile(deviceIds) {
-  const run = async () => {
-    await new Promise((resolve) => locationsStream.end(resolve));
-    const tmp = locationsFile + '.tmp';
-    try {
-      const content = fs.existsSync(locationsFile) ? await fs.promises.readFile(locationsFile, 'utf8') : '';
-      const kept = content.split('\n').filter((line) => {
-        if (!line.trim()) return false;
-        try { return !deviceIds.has(JSON.parse(line).deviceId); } catch { return false; }
-      });
-      await fs.promises.writeFile(tmp, kept.length ? kept.join('\n') + '\n' : '');
-      await fs.promises.rename(tmp, locationsFile);
-    } finally {
-      locationsStream = fs.createWriteStream(locationsFile, { flags: 'a' });
-      for (const line of pendingLines.splice(0)) locationsStream.write(line);
-    }
-  };
-  compacting = (compacting || Promise.resolve()).then(run).finally(() => { compacting = null; });
-  return compacting;
-}
-let lastSeenDirty = false;
-// last_seen/battery cambian en cada muestra: se guardan como mucho cada 5 s.
-setInterval(() => { if (lastSeenDirty) { lastSeenDirty = false; saveMeta(); } }, 5000).unref();
 
 // ---------------------------------------------------------------------------
 // HTTP
 // ---------------------------------------------------------------------------
 const app = express();
-app.set('trust proxy', 1); // Detrás de Nginx: usar X-Forwarded-For para rate limit.
+app.set('trust proxy', 1); // Detrás de Nginx.
 app.use(helmet({ contentSecurityPolicy: false, hsts: false, crossOriginOpenerPolicy: false, originAgentCluster: false }));
 app.use(cors({ origin: process.env.CORS_ORIGIN || true }));
 app.use(express.json({ limit: '1mb' }));
@@ -134,11 +51,19 @@ const apiLimiter = rateLimit({
   limit: 1200,
   standardHeaders: true,
   legacyHeaders: false,
-  // El envío de ubicaciones es un flujo continuo (hasta varios Hz por dispositivo).
-  skip: (req) => req.method === 'POST' && /\/locations(\/batch)?$/.test(req.path),
+  // Envío de puntos y latidos: flujo continuo de varios por segundo.
+  skip: (req) => req.method === 'POST' && /\/(locations(\/batch)?|heartbeat)$/.test(req.path),
 });
 app.use('/api/auth', authLimiter);
 app.use('/api', apiLimiter);
+
+// Rutas que necesitan la base de datos responden 503 mientras no esté lista.
+app.use('/api', (req, res, next) => {
+  if (dbReady || req.path === '/health' || req.path === '/time') return next();
+  return res.status(503).json({ error: 'Base de datos no disponible todavía' });
+});
+
+const asyncRoute = (handler) => (req, res, next) => Promise.resolve(handler(req, res, next)).catch(next);
 
 function tokenFor(user) {
   return jwt.sign({ sub: String(user.id), email: user.email }, jwtSecret, { expiresIn: process.env.JWT_EXPIRES_IN || '8h' });
@@ -156,21 +81,20 @@ function finiteOrNull(value) {
 // Tiempo real
 // ---------------------------------------------------------------------------
 const viewers = new Set();
-const deviceSockets = new Map(); // deviceId -> Set<WebSocket>
-const latencySamples = [];
-let discardedSamples = 0;
+const deviceSockets = new Map(); // deviceId -> Set<WebSocket> (versiones antiguas de la app)
 
 function broadcast(message) {
   const payload = JSON.stringify(message);
   for (const socket of viewers) {
-    // Si un panel no da abasto (red lenta) se descarta en vez de acumular retraso.
+    // Si un panel no da abasto se descarta en vez de acumular retraso.
     if (socket.readyState === 1 && socket.bufferedAmount < 512 * 1024) socket.send(payload);
   }
 }
 
 function isOnline(device) {
-  return (deviceSockets.get(device.device_id)?.size ?? 0) > 0
-    || Date.now() - Date.parse(device.last_seen) < onlineWindowMs;
+  if ((deviceSockets.get(device.device_id)?.size ?? 0) > 0) return true;
+  if (stoppedDevices.has(device.device_id)) return false;
+  return Date.now() - Date.parse(device.last_seen) < onlineWindowMs;
 }
 
 function publicDevice(device) {
@@ -180,29 +104,44 @@ function publicDevice(device) {
   };
 }
 
-function upsertDevice(body) {
-  const deviceId = String(body.deviceId || '').trim();
-  if (!deviceId || deviceId.length > 150) return { error: 'deviceId inválido' };
-  const now = new Date().toISOString();
-  const fields = {
-    name: String(body.name || 'Dispositivo sin nombre').trim().slice(0, 120),
-    platform: String(body.platform || 'desconocido').slice(0, 40),
-    app_version: String(body.appVersion || '0.0.0').slice(0, 40),
-    model: String(body.model || '').slice(0, 120),
-    last_seen: now,
-    battery: Number.isInteger(body.battery) ? body.battery : null,
-  };
-  let device = data.devices.find((item) => item.device_id === deviceId);
-  const created = !device;
-  if (device) Object.assign(device, fields);
-  else data.devices.push((device = { device_id: deviceId, user_id: null, consented_at: now, ...fields }));
-  saveMeta();
-  broadcast({ type: 'device.updated', data: publicDevice(device) });
-  return { device, created };
+const lastOnlineState = new Map();
+function publishDevice(device) {
+  const data = publicDevice(device);
+  lastOnlineState.set(device.device_id, data.online);
+  broadcast({ type: 'device.updated', data });
 }
 
-function acceptLocation(deviceId, body) {
-  if (!deviceId) return { status: 400, error: 'deviceId obligatorio' };
+// Avisa al panel cuando un dispositivo deja de enviar (pasa a offline).
+setInterval(() => {
+  for (const device of devices.values()) {
+    const online = isOnline(device);
+    if (lastOnlineState.get(device.device_id) !== online) publishDevice(device);
+  }
+}, 5000).unref();
+
+async function upsertDevice(body) {
+  const deviceId = String(body.deviceId || '').trim();
+  if (!deviceId || deviceId.length > 150) return { error: 'deviceId inválido' };
+  const result = await db.upsertDevice({
+    deviceId,
+    name: String(body.name || 'Dispositivo sin nombre').trim().slice(0, 120),
+    platform: String(body.platform || 'desconocido').slice(0, 40),
+    appVersion: String(body.appVersion || '0.0.0').slice(0, 40),
+    model: String(body.model || '').slice(0, 120),
+    battery: Number.isInteger(body.battery) ? body.battery : null,
+  });
+  devices.set(deviceId, result.device);
+  stoppedDevices.delete(deviceId);
+  publishDevice(result.device);
+  return result;
+}
+
+/**
+ * Valida y procesa una ubicación. Se difunde al panel de inmediato; `saved`
+ * es una promesa que se resuelve cuando ya está guardada en PostgreSQL.
+ */
+async function acceptLocation(deviceId, body) {
+  if (!deviceId || deviceId.length > 150) return { status: 400, error: 'deviceId obligatorio' };
   if (!validCoordinate(body.latitude, -90, 90) || !validCoordinate(body.longitude, -180, 180)) {
     discardedSamples++;
     return { status: 400, error: 'Coordenadas inválidas' };
@@ -213,14 +152,19 @@ function acceptLocation(deviceId, body) {
     return { status: 400, error: 'timestamp inválido' };
   }
   const sampleId = String(body.sampleId || `${deviceId}-${timestamp.getTime()}-${body.latitude}-${body.longitude}`).slice(0, 200);
-  if (seenSamples.has(sampleId)) return { duplicate: true, sampleId };
+  if (recentSamples.has(sampleId)) return { duplicate: true, sampleId, saved: Promise.resolve() };
+  rememberSample(sampleId);
 
-  let device = data.devices.find((item) => item.device_id === deviceId);
-  // Un dispositivo desconocido (p. ej. tras borrar datos del servidor) se registra solo.
-  if (!device) device = upsertDevice({ deviceId, name: 'Dispositivo', platform: 'android' }).device;
+  let device = devices.get(deviceId);
+  if (!device) {
+    // Dispositivo desconocido (p. ej. eliminado desde el panel): se registra solo.
+    device = await db.ensureDevice(deviceId);
+    devices.set(deviceId, device);
+  }
 
   const receivedMs = Date.now();
   const latencyMs = Math.max(0, receivedMs - timestamp.getTime());
+  const live = body.live !== false;
   const location = {
     deviceId, sampleId,
     latitude: body.latitude, longitude: body.longitude,
@@ -233,111 +177,189 @@ function acceptLocation(deviceId, body) {
     receivedAt: new Date(receivedMs).toISOString(),
     latencyMs,
   };
-  indexLocation(location);
-  appendLocationLine(JSON.stringify(location) + '\n');
 
-  // Solo las muestras "en vivo" cuentan para la métrica de latencia (no la cola offline).
-  if (body.live !== false && latencyMs < 60_000) {
+  // 1) Tiempo real: se difunde antes de tocar la base de datos.
+  const wasOnline = isOnline(device);
+  stoppedDevices.delete(deviceId);
+  device.last_seen = location.receivedAt;
+  if (location.battery !== null) device.battery = location.battery;
+  if (!wasOnline) publishDevice(device);
+  const previous = latestByDevice.get(deviceId);
+  if (!previous || previous.timestamp <= location.timestamp) latestByDevice.set(deviceId, location);
+  broadcast({ type: 'location.updated', data: { ...location, live, serverTime: Date.now() } });
+
+  // Solo las muestras en vivo cuentan para la métrica (no la cola offline).
+  if (live && latencyMs < 60_000) {
     latencySamples.push(latencyMs);
     if (latencySamples.length > 5000) latencySamples.shift();
   }
-  const wasOnline = isOnline(device);
-  device.last_seen = location.receivedAt;
-  if (location.battery !== null) device.battery = location.battery;
-  lastSeenDirty = true;
-  if (!wasOnline) broadcast({ type: 'device.updated', data: publicDevice(device) });
 
-  broadcast({ type: 'location.updated', data: { ...location, live: body.live !== false, serverTime: Date.now() } });
-  return { location, sampleId };
+  // 2) Persistencia por lotes.
+  db.touchDevice(deviceId, location.receivedAt, location.battery);
+  const saved = db.enqueueLocation(location).catch((error) => {
+    // No se pudo guardar: se olvida el sampleId para aceptar el reintento.
+    recentSamples.delete(sampleId);
+    throw error;
+  });
+  return { location, sampleId, saved };
 }
 
-app.get('/api/health', (_req, res) => res.json({ ok: true, service: 'movimiento-api', time: Date.now() }));
+app.get('/api/health', asyncRoute(async (_req, res) => {
+  let dbMs = null;
+  try { dbMs = await db.ping(); } catch { /* sin conexión */ }
+  res.status(dbMs === null ? 503 : 200).json({ ok: dbMs !== null, service: 'movimiento-api', database: dbMs === null ? 'desconectada' : 'postgresql', dbPingMs: dbMs, time: Date.now() });
+}));
+
+// Sincronización de reloj del celular (estilo NTP) y medición de RTT.
 app.get('/api/time', (_req, res) => res.json({ serverTime: Date.now() }));
 
-app.post('/api/auth/register', async (req, res) => {
+app.post('/api/auth/register', asyncRoute(async (req, res) => {
   const email = String(req.body.email || '').trim().toLowerCase();
   const password = String(req.body.password || '');
   if (!/^\S+@\S+\.\S+$/.test(email) || password.length < 8) {
     return res.status(400).json({ error: 'Correo inválido o contraseña menor de 8 caracteres' });
   }
-  if (data.users.some((user) => user.email === email)) {
-    return res.status(409).json({ error: 'El correo ya está registrado' });
-  }
-  const user = { id: data.nextUserId++, email, password_hash: await bcrypt.hash(password, 12), created_at: new Date().toISOString() };
-  data.users.push(user);
-  saveMeta();
-  return res.status(201).json({ token: tokenFor(user), user: { id: user.id, email: user.email } });
-});
+  const user = await db.createUser(email, await bcrypt.hash(password, 12));
+  if (!user) return res.status(409).json({ error: 'El correo ya está registrado' });
+  return res.status(201).json({ token: tokenFor(user), user });
+}));
 
-app.post('/api/auth/login', async (req, res) => {
+app.post('/api/auth/login', asyncRoute(async (req, res) => {
   const email = String(req.body.email || '').trim().toLowerCase();
   const password = String(req.body.password || '');
-  const user = data.users.find((item) => item.email === email);
+  const user = await db.findUserByEmail(email);
   if (!user || !(await bcrypt.compare(password, user.password_hash))) {
     return res.status(401).json({ error: 'Credenciales inválidas' });
   }
   return res.json({ token: tokenFor(user), user: { id: user.id, email: user.email } });
-});
+}));
 
-app.post('/api/devices', (req, res) => {
-  const result = upsertDevice(req.body || {});
+// --- Dispositivos -----------------------------------------------------------
+
+// POST: registrar o actualizar un dispositivo.
+app.post('/api/devices', asyncRoute(async (req, res) => {
+  const result = await upsertDevice(req.body || {});
   if (result.error) return res.status(400).json({ error: result.error });
-  return res.status(result.created ? 201 : 200).json({ deviceId: result.device.device_id, created: result.created });
+  return res.status(result.created ? 201 : 200).json({ deviceId: result.device.device_id, created: result.created, serverTime: Date.now() });
+}));
+
+// GET: lista de dispositivos.
+app.get('/api/devices', (_req, res) => {
+  const list = [...devices.values()].sort((a, b) => a.name.localeCompare(b.name)).map(publicDevice);
+  res.json({ devices: list });
 });
 
-app.post('/api/devices/:deviceId/locations', (req, res) => {
-  const result = acceptLocation(String(req.params.deviceId), req.body || {});
+// POST: latido (el celular sigue activo aunque esté quieto y no envíe puntos).
+app.post('/api/devices/:deviceId/heartbeat', asyncRoute(async (req, res) => {
+  const deviceId = String(req.params.deviceId);
+  let device = devices.get(deviceId);
+  if (!device) {
+    device = await db.ensureDevice(deviceId);
+    devices.set(deviceId, device);
+  }
+  const battery = Number.isInteger(req.body?.battery) ? req.body.battery : null;
+  device.last_seen = new Date().toISOString();
+  if (battery !== null) device.battery = battery;
+  if (req.body?.active === false) stoppedDevices.add(deviceId);
+  else stoppedDevices.delete(deviceId);
+  db.touchDevice(deviceId, device.last_seen, battery);
+  if (lastOnlineState.get(deviceId) !== isOnline(device) || battery !== null) publishDevice(device);
+  res.json({ ok: true, serverTime: Date.now() });
+}));
+
+// --- Ubicaciones (señales GPS) ------------------------------------------------
+
+// POST: un punto GPS. Responde cuando ya está guardado en PostgreSQL.
+app.post('/api/devices/:deviceId/locations', asyncRoute(async (req, res) => {
+  const result = await acceptLocation(String(req.params.deviceId), req.body || {});
   if (result.error) return res.status(result.status).json({ error: result.error });
+  try {
+    await result.saved;
+  } catch {
+    return res.status(503).json({ error: 'No se pudo guardar en la base de datos; reintente' });
+  }
   if (result.duplicate) return res.status(200).json({ ok: true, duplicate: true, sampleId: result.sampleId });
-  return res.status(201).json({ ok: true, sampleId: result.sampleId });
-});
+  return res.status(201).json({ ok: true, sampleId: result.sampleId, serverTime: Date.now() });
+}));
 
-app.post('/api/devices/:deviceId/locations/batch', (req, res) => {
+// POST: lote de puntos (cola offline del celular).
+app.post('/api/devices/:deviceId/locations/batch', asyncRoute(async (req, res) => {
   const items = Array.isArray(req.body?.locations) ? req.body.locations.slice(0, 500) : [];
+  const deviceId = String(req.params.deviceId);
+  const results = [];
+  for (const item of items) results.push(await acceptLocation(deviceId, { ...item, live: false }));
   const accepted = [];
-  for (const item of items) {
-    const result = acceptLocation(String(req.params.deviceId), { ...item, live: false });
-    if (!result.error) accepted.push(result.sampleId);
-  }
-  return res.json({ ok: true, accepted });
-});
+  const rejected = [];
+  await Promise.all(results.map(async (result) => {
+    if (result.error) return;
+    try {
+      await result.saved;
+      accepted.push(result.sampleId);
+    } catch {
+      rejected.push(result.sampleId);
+    }
+  }));
+  return res.status(rejected.length ? 207 : 200).json({ ok: rejected.length === 0, accepted, rejected });
+}));
 
-// Borra la ruta (todas las ubicaciones) de un dispositivo, sin eliminarlo.
-app.delete('/api/devices/:deviceId/locations', async (req, res) => {
+// GET: última posición conocida.
+app.get('/api/devices/:deviceId/location', asyncRoute(async (req, res) => {
   const deviceId = String(req.params.deviceId);
-  if (!data.devices.some((device) => device.device_id === deviceId)) return res.status(404).json({ error: 'Dispositivo no registrado' });
-  locationsByDevice.delete(deviceId);
-  try {
-    await removeLocationsFromFile(new Set([deviceId]));
-  } catch (error) {
-    console.error('No se pudo borrar la ruta', error);
-    return res.status(500).json({ error: 'No se pudo borrar la ruta del disco' });
+  if (!devices.has(deviceId)) return res.status(404).json({ error: 'Dispositivo no registrado' });
+  const location = latestByDevice.get(deviceId) || await db.latestLocation(deviceId);
+  if (location) latestByDevice.set(deviceId, location);
+  const active = location && Date.now() - Date.parse(location.receivedAt || location.timestamp) < sessionGapMs ? location : null;
+  res.json({ location: active, lastKnown: location });
+}));
+
+// GET: historial. ?lastSession=true (último recorrido), ?activeOnly=true
+// (recorrido en curso) o ?from=ISO&to=ISO (rango).
+app.get('/api/devices/:deviceId/history', asyncRoute(async (req, res) => {
+  const deviceId = String(req.params.deviceId);
+  if (!devices.has(deviceId)) return res.status(404).json({ error: 'Dispositivo no registrado' });
+  await db.flush(); // Incluir lo que aún está en la cola de escritura.
+  const limit = Math.min(Number(req.query.limit) || 10000, 50000);
+  if (req.query.activeOnly === 'true' || req.query.lastSession === 'true') {
+    const latest = latestByDevice.get(deviceId) || await db.latestLocation(deviceId);
+    if (!latest || (req.query.activeOnly === 'true' && Date.now() - Date.parse(latest.receivedAt) > sessionGapMs)) {
+      return res.json({ locations: [] });
+    }
+    return res.json({ locations: await db.lastSession(deviceId, sessionGapMs, limit) });
   }
+  const from = req.query.from ? new Date(req.query.from) : new Date(Date.now() - 24 * 60 * 60 * 1000);
+  const to = req.query.to ? new Date(req.query.to) : new Date();
+  if (Number.isNaN(from.getTime()) || Number.isNaN(to.getTime())) return res.status(400).json({ error: 'Rango de fechas inválido' });
+  res.json({ locations: await db.historyRange(deviceId, from, to, limit) });
+}));
+
+// DELETE: borra la ruta de un dispositivo (sin eliminarlo).
+app.delete('/api/devices/:deviceId/locations', asyncRoute(async (req, res) => {
+  const deviceId = String(req.params.deviceId);
+  if (!devices.has(deviceId)) return res.status(404).json({ error: 'Dispositivo no registrado' });
+  const removed = await db.deleteLocations(deviceId);
+  latestByDevice.delete(deviceId);
   broadcast({ type: 'route.cleared', data: { deviceId } });
-  return res.json({ ok: true });
-});
+  return res.json({ ok: true, removed });
+}));
 
-// Elimina el dispositivo y su ruta. Si el celular sigue enviando datos,
-// volverá a aparecer como dispositivo nuevo.
-app.delete('/api/devices/:deviceId', async (req, res) => {
+// DELETE: elimina el dispositivo y su ruta (ON DELETE CASCADE). Si el
+// celular sigue enviando datos volverá a aparecer.
+app.delete('/api/devices/:deviceId', asyncRoute(async (req, res) => {
   const deviceId = String(req.params.deviceId);
-  const index = data.devices.findIndex((device) => device.device_id === deviceId);
-  if (index === -1) return res.status(404).json({ error: 'Dispositivo no registrado' });
-  data.devices.splice(index, 1);
-  locationsByDevice.delete(deviceId);
-  saveMeta();
-  try {
-    await removeLocationsFromFile(new Set([deviceId]));
-  } catch (error) {
-    console.error('No se pudo borrar la ruta', error);
-  }
+  if (!devices.has(deviceId)) return res.status(404).json({ error: 'Dispositivo no registrado' });
+  await db.deleteDevice(deviceId);
+  devices.delete(deviceId);
+  latestByDevice.delete(deviceId);
+  lastOnlineState.delete(deviceId);
   broadcast({ type: 'device.removed', data: { deviceId } });
   return res.json({ ok: true });
-});
+}));
 
-app.get('/api/metrics', (_req, res) => {
+app.get('/api/metrics', asyncRoute(async (_req, res) => {
   const sorted = [...latencySamples].sort((a, b) => a - b);
   const percentile = (ratio) => (sorted.length ? sorted[Math.min(sorted.length - 1, Math.floor((sorted.length - 1) * ratio))] : null);
+  let dbPingMs = null;
+  try { dbPingMs = await db.ping(); } catch { /* sin conexión */ }
   res.json({
     samples: sorted.length,
     averageMs: sorted.length ? sorted.reduce((sum, value) => sum + value, 0) / sorted.length : null,
@@ -345,72 +367,32 @@ app.get('/api/metrics', (_req, res) => {
     maxMs: sorted.at(-1) ?? null,
     under1000Percent: sorted.length ? (sorted.filter((value) => value < 1000).length / sorted.length) * 100 : null,
     discardedSamples,
-    connectedDevices: [...deviceSockets.values()].filter((set) => set.size > 0).length,
+    onlineDevices: [...devices.values()].filter(isOnline).length,
     connectedViewers: viewers.size,
+    dbPingMs,
+    dbPendingWrites: db.pendingWrites(),
   });
-});
-
-app.get('/api/devices', (_req, res) => {
-  const devices = [...data.devices].sort((a, b) => a.name.localeCompare(b.name)).map(publicDevice);
-  res.json({ devices });
-});
-
-app.get('/api/devices/:deviceId/location', (req, res) => {
-  if (!data.devices.some((device) => device.device_id === req.params.deviceId)) return res.status(404).json({ error: 'Dispositivo no registrado' });
-  const location = locationsByDevice.get(req.params.deviceId)?.at(-1) || null;
-  const activeLocation = location && Date.now() - Date.parse(location.receivedAt || location.timestamp) < activeWindowMs ? location : null;
-  res.json({ location: activeLocation, lastKnown: location });
-});
-
-app.get('/api/devices/:deviceId/history', (req, res) => {
-  if (!data.devices.some((device) => device.device_id === req.params.deviceId)) return res.status(404).json({ error: 'Dispositivo no registrado' });
-  const list = locationsByDevice.get(req.params.deviceId) || [];
-  let locations;
-  if (req.query.activeOnly === 'true' || req.query.lastSession === 'true') {
-    // Recorrido actual/último: muestras contiguas desde el final sin huecos
-    // mayores a activeWindowMs. activeOnly además exige que sea reciente.
-    const last = list.at(-1);
-    if (!last || (req.query.activeOnly === 'true' && Date.now() - Date.parse(last.receivedAt || last.timestamp) > activeWindowMs)) {
-      locations = [];
-    } else {
-      let start = list.length - 1;
-      while (start > 0 && Date.parse(list[start].timestamp) - Date.parse(list[start - 1].timestamp) < activeWindowMs) start--;
-      locations = list.slice(start);
-    }
-  } else {
-    const from = req.query.from ? new Date(req.query.from) : new Date(Date.now() - 24 * 60 * 60 * 1000);
-    const to = req.query.to ? new Date(req.query.to) : new Date();
-    if (Number.isNaN(from.getTime()) || Number.isNaN(to.getTime())) return res.status(400).json({ error: 'Rango de fechas inválido' });
-    const fromIso = from.toISOString();
-    const toIso = to.toISOString();
-    locations = list.filter((item) => item.timestamp >= fromIso && item.timestamp <= toIso);
-  }
-  res.json({ locations: locations.slice(-10000) });
-});
+}));
 
 app.use(express.static(path.join(__dirname, 'public'), {
   setHeaders: (res, file) => { if (file.endsWith('.html')) res.setHeader('Cache-Control', 'no-cache'); },
 }));
 app.use('/api', (_req, res) => res.status(404).json({ error: 'Ruta no encontrada' }));
+// eslint-disable-next-line no-unused-vars
+app.use((error, _req, res, _next) => {
+  console.error('[api]', error.message);
+  res.status(500).json({ error: 'Error interno del servidor' });
+});
 
 // ---------------------------------------------------------------------------
-// WebSocket
-// Mensajes del celular: hello, ping, location, locations (lote offline).
-// Mensajes del panel: ping. El panel solo recibe difusiones.
+// WebSocket: el panel recibe las difusiones y mide el RTT con ping. También
+// se aceptan los mensajes de versiones anteriores de la app (hello/location).
 // ---------------------------------------------------------------------------
 const server = http.createServer(app);
 const websocketServer = new WebSocketServer({ server, path: '/ws', perMessageDeflate: false, maxPayload: 1024 * 1024 });
 
 function send(socket, message) {
   if (socket.readyState === 1) socket.send(JSON.stringify(message));
-}
-
-function attachDevice(socket, deviceId) {
-  viewers.delete(socket);
-  socket.deviceId = deviceId;
-  let set = deviceSockets.get(deviceId);
-  if (!set) deviceSockets.set(deviceId, (set = new Set()));
-  set.add(socket);
 }
 
 websocketServer.on('connection', (socket) => {
@@ -420,7 +402,7 @@ websocketServer.on('connection', (socket) => {
   send(socket, { type: 'connected', serverTime: Date.now() });
 
   socket.on('pong', () => { socket.isAlive = true; });
-  socket.on('message', (raw) => {
+  socket.on('message', async (raw) => {
     socket.isAlive = true;
     let message;
     try {
@@ -428,43 +410,53 @@ websocketServer.on('connection', (socket) => {
     } catch {
       return send(socket, { type: 'error', error: 'Mensaje WebSocket inválido' });
     }
-    switch (message.type) {
-      case 'ping':
-        // Sincronización de reloj (estilo NTP) y medición de RTT.
-        return send(socket, { type: 'pong', t: message.t, serverTime: Date.now() });
-      case 'hello': {
-        const result = upsertDevice(message.data || {});
-        if (result.error) return send(socket, { type: 'error', error: result.error });
-        attachDevice(socket, result.device.device_id);
-        broadcast({ type: 'device.updated', data: publicDevice(result.device) });
-        return send(socket, { type: 'hello.ok', serverTime: Date.now() });
-      }
-      case 'location': {
-        const payload = message.data || {};
-        const deviceId = String(payload.deviceId || socket.deviceId || '');
-        const result = acceptLocation(deviceId, payload);
-        if (result.error) return send(socket, { type: 'location.rejected', data: { sampleId: payload.sampleId, error: result.error } });
-        return send(socket, { type: 'location.accepted', data: { sampleId: result.sampleId, duplicate: result.duplicate === true } });
-      }
-      case 'locations': {
-        const items = Array.isArray(message.data) ? message.data.slice(0, 500) : [];
-        const accepted = [];
-        for (const item of items) {
-          const result = acceptLocation(String(item.deviceId || socket.deviceId || ''), { ...item, live: false });
-          if (!result.error) accepted.push(result.sampleId);
+    try {
+      switch (message.type) {
+        case 'ping':
+          return send(socket, { type: 'pong', t: message.t, serverTime: Date.now() });
+        case 'hello': {
+          if (!dbReady) return send(socket, { type: 'error', error: 'Base de datos no disponible' });
+          const result = await upsertDevice(message.data || {});
+          if (result.error) return send(socket, { type: 'error', error: result.error });
+          viewers.delete(socket);
+          socket.deviceId = result.device.device_id;
+          if (!deviceSockets.has(socket.deviceId)) deviceSockets.set(socket.deviceId, new Set());
+          deviceSockets.get(socket.deviceId).add(socket);
+          return send(socket, { type: 'hello.ok', serverTime: Date.now() });
         }
-        return send(socket, { type: 'locations.accepted', data: { sampleIds: accepted } });
+        case 'location': {
+          if (!dbReady) return undefined;
+          const payload = message.data || {};
+          const result = await acceptLocation(String(payload.deviceId || socket.deviceId || ''), payload);
+          if (result.error) return send(socket, { type: 'location.rejected', data: { sampleId: payload.sampleId, error: result.error } });
+          await result.saved;
+          return send(socket, { type: 'location.accepted', data: { sampleId: result.sampleId, duplicate: result.duplicate === true } });
+        }
+        case 'locations': {
+          if (!dbReady) return undefined;
+          const items = Array.isArray(message.data) ? message.data.slice(0, 500) : [];
+          const accepted = [];
+          for (const item of items) {
+            const result = await acceptLocation(String(item.deviceId || socket.deviceId || ''), { ...item, live: false });
+            if (result.error) continue;
+            try { await result.saved; accepted.push(result.sampleId); } catch { /* reintento del celular */ }
+          }
+          return send(socket, { type: 'locations.accepted', data: { sampleIds: accepted } });
+        }
+        default:
+          return undefined;
       }
-      default:
-        return undefined;
+    } catch (error) {
+      console.error('[ws]', error.message);
+      return undefined;
     }
   });
   socket.on('close', () => {
     viewers.delete(socket);
     if (socket.deviceId) {
       deviceSockets.get(socket.deviceId)?.delete(socket);
-      const device = data.devices.find((item) => item.device_id === socket.deviceId);
-      if (device) broadcast({ type: 'device.updated', data: publicDevice(device) });
+      const device = devices.get(socket.deviceId);
+      if (device) publishDevice(device);
     }
   });
   socket.on('error', () => socket.terminate());
@@ -480,13 +472,34 @@ const heartbeat = setInterval(() => {
 }, 15000);
 websocketServer.on('close', () => clearInterval(heartbeat));
 
+// ---------------------------------------------------------------------------
+// Arranque
+// ---------------------------------------------------------------------------
+async function connectDatabase() {
+  for (let attempt = 1; ; attempt++) {
+    try {
+      await db.migrate();
+      for (const device of await db.listDevices()) devices.set(device.device_id, device);
+      dbReady = true;
+      console.log(`[db] PostgreSQL listo (${devices.size} dispositivos)`);
+      return;
+    } catch (error) {
+      console.error(`[db] Sin conexión a PostgreSQL (intento ${attempt}): ${error.message}`);
+      await new Promise((resolve) => setTimeout(resolve, Math.min(10_000, 1000 * attempt)));
+    }
+  }
+}
+
+let closing = false;
 async function shutdown() {
-  if (compacting) await compacting.catch(() => {});
-  locationsStream.end();
-  fs.writeFileSync(dbFile, JSON.stringify(data));
+  if (closing) return;
+  closing = true;
+  server.close();
+  await db.close().catch(() => {});
   process.exit(0);
 }
 process.on('SIGINT', shutdown);
 process.on('SIGTERM', shutdown);
 
 server.listen(port, () => console.log(`Movimiento API escuchando en http://localhost:${port}`));
+connectDatabase();
