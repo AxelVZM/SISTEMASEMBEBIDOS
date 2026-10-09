@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:latlong2/latlong.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:app/main.dart';
@@ -31,6 +32,45 @@ void main() {
         if (r.enMovimiento) movimientos++;
       }
       expect(movimientos, 0);
+    });
+
+    test('reposo por acelerómetro: saltos de ±15 m (interior) no mueven el punto', () {
+      final filtro = FiltroGps();
+      const lat = -13.53195, lng = -71.96746;
+      final inicio = filtro.procesar(latitud: lat, longitud: lng, precision: 15, velocidad: 0, rumbo: 0, tiempoMs: 0)!.punto;
+      LecturaFiltrada? r;
+      var movimientos = 0;
+      for (var i = 1; i <= 60; i++) {
+        // Saltos pseudoaleatorios de hasta ~15 m en ambas direcciones.
+        final dLat = ((i * 37) % 11 - 5) / 5 * 15 / 111320;
+        final dLng = ((i * 53) % 13 - 6) / 6 * 15 / 108240;
+        r = filtro.procesar(
+          latitud: lat + dLat, longitud: lng + dLng,
+          precision: 15, velocidad: 0, rumbo: 0, tiempoMs: i * 1000,
+          sensorEnReposo: true,
+        );
+        if (r!.enMovimiento) movimientos++;
+      }
+      final deriva = const Distance().as(LengthUnit.Meter, inicio, r!.punto);
+      expect(movimientos, 0);
+      expect(deriva, lessThan(2));
+    });
+
+    test('al salir del reposo vuelve a seguir sin retraso', () {
+      final filtro = FiltroGps();
+      for (var i = 0; i <= 30; i++) {
+        filtro.procesar(latitud: -13.5, longitud: -71.9, precision: 5, velocidad: 0, rumbo: 0, tiempoMs: i * 1000, sensorEnReposo: true);
+      }
+      LecturaFiltrada? r;
+      for (var i = 1; i <= 10; i++) {
+        r = filtro.procesar(
+          latitud: -13.5 + i * 1.4 / 111320, longitud: -71.9,
+          precision: 5, velocidad: 1.4, rumbo: 0, tiempoMs: 30000 + i * 1000,
+        );
+      }
+      final esperado = -13.5 + 14 / 111320;
+      expect((r!.punto.latitude - esperado).abs() * 111320, lessThan(4));
+      expect(r.enMovimiento, isTrue);
     });
 
     test('sin velocidad reportada igual sigue al caminar', () {

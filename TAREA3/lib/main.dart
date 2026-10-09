@@ -19,7 +19,7 @@ import 'servicios/base_datos_local.dart';
 import 'servicios/filtro_gps.dart';
 import 'servicios/seguimiento_remoto.dart';
 
-const _versionApp = '1.2.0';
+const _versionApp = '1.3.0';
 const _canalPantalla = MethodChannel('movimiento/pantalla');
 
 /// Mantiene la pantalla encendida mientras se registra (solo Android).
@@ -131,7 +131,7 @@ class RegistroMovimiento {
   }
 }
 
-/// Telemetría instantánea mostrada en pantalla.
+/// TelemetrÃ­a instantÃ¡nea mostrada en pantalla.
 class Telemetria {
   const Telemetria({
     this.velocidadKmh = 0,
@@ -175,7 +175,7 @@ class _PantallaMovimientoState extends State<PantallaMovimiento>
   final _segmentos = <List<LatLng>>[];
 
   // Valores que cambian muchas veces por segundo: se notifican sin
-  // reconstruir toda la pantalla (el acelerómetro antes redibujaba el mapa
+  // reconstruir toda la pantalla (el acelerÃ³metro antes redibujaba el mapa
   // a ~60 Hz y causaba tirones).
   final _posicionMostrada = ValueNotifier<LatLng?>(null);
   final _aceleracion = ValueNotifier<double>(0);
@@ -193,6 +193,9 @@ class _PantallaMovimientoState extends State<PantallaMovimiento>
   Timer? _temporizadorEdad;
 
   double _aceleracionFiltrada = 0;
+  static const _ventanaReposoMs = 2000;
+  static const _umbralReposo = 0.45; // m/sÂ² sin gravedad
+  final _ventanaAceleracion = <(int, double)>[];
   double _distanciaMetros = 0;
   double _velocidadMaximaKmh = 0;
   double _velocidadTotalKmh = 0;
@@ -270,7 +273,7 @@ class _PantallaMovimientoState extends State<PantallaMovimiento>
     });
   }
 
-  /// Centra el mapa en la última posición conocida sin pedir permisos.
+  /// Centra el mapa en la Ãºltima posiciÃ³n conocida sin pedir permisos.
   Future<void> _mostrarUltimaUbicacionConocida() async {
     try {
       final permiso = await Geolocator.checkPermission();
@@ -284,7 +287,7 @@ class _PantallaMovimientoState extends State<PantallaMovimiento>
       _posicionMostrada.value = punto;
       _mapController.move(punto, 17);
     } catch (_) {
-      // Sin plugin (tests) o sin servicio de ubicación.
+      // Sin plugin (tests) o sin servicio de ubicaciÃ³n.
     }
   }
 
@@ -301,7 +304,7 @@ class _PantallaMovimientoState extends State<PantallaMovimiento>
       if (mounted) {
         setState(
           () => _mensaje =
-              'La ubicación está desactivada. Actívala para comenzar.',
+              'La ubicaciÃ³n estÃ¡ desactivada. ActÃ­vala para comenzar.',
         );
       }
       await Geolocator.openLocationSettings();
@@ -315,7 +318,7 @@ class _PantallaMovimientoState extends State<PantallaMovimiento>
       if (mounted) {
         setState(
           () => _mensaje =
-              'El permiso está bloqueado. Actívalo en Ajustes > Aplicaciones > Movimiento GPS > Permisos.',
+              'El permiso estÃ¡ bloqueado. ActÃ­valo en Ajustes > Aplicaciones > Movimiento GPS > Permisos.',
         );
       }
       await Geolocator.openAppSettings();
@@ -326,18 +329,18 @@ class _PantallaMovimientoState extends State<PantallaMovimiento>
       if (mounted) {
         setState(
           () => _mensaje =
-              'Debes permitir el acceso a la ubicación para registrar el recorrido.',
+              'Debes permitir el acceso a la ubicaciÃ³n para registrar el recorrido.',
         );
       }
       return false;
     }
-    // Sin precisión exacta (Android 12+) el punto puede estar a ~2 km.
+    // Sin precisiÃ³n exacta (Android 12+) el punto puede estar a ~2 km.
     try {
       final precision = await Geolocator.getLocationAccuracy();
       if (precision == LocationAccuracyStatus.reduced && mounted) {
         setState(
           () => _mensaje =
-              'Activa "Ubicación precisa" en los permisos de la app para un seguimiento exacto.',
+              'Activa "UbicaciÃ³n precisa" en los permisos de la app para un seguimiento exacto.',
         );
       }
     } catch (_) {}
@@ -352,6 +355,7 @@ class _PantallaMovimientoState extends State<PantallaMovimiento>
     if (_deviceId.isEmpty) await _cargarConfiguracion();
 
     _filtro.reiniciar();
+    _ventanaAceleracion.clear();
     _nivelBateria = await _leerBateria();
     _bateriaInicio = _nivelBateria ?? 0;
     _seguimientoRemoto.bateria = _nivelBateria;
@@ -377,7 +381,7 @@ class _PantallaMovimientoState extends State<PantallaMovimiento>
     });
     _telemetria.value = const Telemetria();
 
-    // La conexión se abre en paralelo: el GPS empieza a registrar de
+    // La conexiÃ³n se abre en paralelo: el GPS empieza a registrar de
     // inmediato y las muestras quedan en cola local hasta que haya enlace.
     unawaited(
       _seguimientoRemoto.iniciar(
@@ -421,7 +425,7 @@ class _PantallaMovimientoState extends State<PantallaMovimiento>
         foregroundNotificationConfig: _usarServicioPrimerPlano
             ? const ForegroundNotificationConfig(
                 notificationTitle:
-                    'Movimiento GPS está registrando tu recorrido',
+                    'Movimiento GPS estÃ¡ registrando tu recorrido',
                 notificationText: 'Seguimiento en tiempo real activo',
                 notificationChannelName: 'Seguimiento de movimiento',
                 setOngoing: true,
@@ -472,14 +476,14 @@ class _PantallaMovimientoState extends State<PantallaMovimiento>
         _agregarUbicacion(posicion);
       }
     } catch (_) {
-      // El flujo continuo seguirá intentándolo.
+      // El flujo continuo seguirÃ¡ intentÃ¡ndolo.
     }
   }
 
   void _errorGps(Object error) {
     if (!mounted) return;
     // Si el servicio en primer plano falla (restricciones del fabricante),
-    // se reintenta una vez sin él para no quedarse sin GPS.
+    // se reintenta una vez sin Ã©l para no quedarse sin GPS.
     if (_usarServicioPrimerPlano &&
         error is! LocationServiceDisabledException &&
         error is! PermissionDeniedException) {
@@ -487,16 +491,16 @@ class _PantallaMovimientoState extends State<PantallaMovimiento>
       if (_registrando && !_pausado) _suscribirSensores();
       setState(
         () => _mensaje =
-            'GPS en modo básico: mantén la app abierta durante el recorrido.',
+            'GPS en modo bÃ¡sico: mantÃ©n la app abierta durante el recorrido.',
       );
       return;
     }
     setState(() {
       _mensaje = switch (error) {
         LocationServiceDisabledException() =>
-          'La ubicación se desactivó en el teléfono.',
+          'La ubicaciÃ³n se desactivÃ³ en el telÃ©fono.',
         PermissionDeniedException() =>
-          'Android retiró el permiso de ubicación.',
+          'Android retirÃ³ el permiso de ubicaciÃ³n.',
         _ => 'Error del GPS: $error',
       };
     });
@@ -506,7 +510,7 @@ class _PantallaMovimientoState extends State<PantallaMovimiento>
     if (!mounted) return;
     final ahora = DateTime.now();
 
-    // Frecuencia real de muestras (media móvil exponencial).
+    // Frecuencia real de muestras (media mÃ³vil exponencial).
     final anterior = _ultimoFix;
     if (anterior != null) {
       final dt = ahora.difference(anterior).inMilliseconds;
@@ -520,7 +524,7 @@ class _PantallaMovimientoState extends State<PantallaMovimiento>
     _ultimoFix = ahora;
 
     // Edad de la lectura. Si el reloj del GPS y el del sistema no coinciden
-    // (diferencia negativa o enorme) se usa el instante de recepción. Las
+    // (diferencia negativa o enorme) se usa el instante de recepciÃ³n. Las
     // lecturas que Android entrega en lote conservan su hora real.
     var edad = ahora.difference(posicion.timestamp);
     if (edad.isNegative || edad > const Duration(minutes: 5)) {
@@ -534,6 +538,7 @@ class _PantallaMovimientoState extends State<PantallaMovimiento>
       velocidad: posicion.speed,
       rumbo: posicion.heading,
       tiempoMs: ahora.subtract(edad).millisecondsSinceEpoch,
+      sensorEnReposo: _sensorEnReposo,
     );
 
     if (lectura == null) {
@@ -568,7 +573,7 @@ class _PantallaMovimientoState extends State<PantallaMovimiento>
       // Solo se acumula distancia si el movimiento supera el ruido del GPS
       // (o si el desplazamiento acumulado ya es claramente real).
       if ((lectura.enMovimiento && distancia >= 1.0) ||
-          distancia > math.max(5.0, posicion.accuracy)) {
+          (!_sensorEnReposo && distancia > math.max(5.0, posicion.accuracy))) {
         segmento.add(punto);
         _distanciaMetros += distancia;
       }
@@ -616,14 +621,14 @@ class _PantallaMovimientoState extends State<PantallaMovimiento>
 
   Future<void> _guardarYEnviar(UbicacionLocal ubicacion) async {
     if (_deviceId.isEmpty) return;
-    // Primero se envía (camino crítico de latencia) y luego se persiste.
+    // Primero se envÃ­a (camino crÃ­tico de latencia) y luego se persiste.
     _seguimientoRemoto.enviar(ubicacion);
     try {
       await _baseDatos.insertarUbicacion(ubicacion);
     } catch (_) {}
   }
 
-  /// Anima el marcador desde la posición mostrada hasta la nueva lectura
+  /// Anima el marcador desde la posiciÃ³n mostrada hasta la nueva lectura
   /// durante (casi) el intervalo entre muestras: movimiento continuo sin
   /// saltos y sin acumular retraso.
   void _moverMarcador(LatLng destino, bool inmediato) {
@@ -683,10 +688,33 @@ class _PantallaMovimientoState extends State<PantallaMovimiento>
     _aceleracion.value = _aceleracionFiltrada;
     _aceleracionTotal += intensidad;
     _muestrasAceleracion++;
-    final moviendose = _aceleracionFiltrada > 1.2;
+
+    // Ventana de los Ãºltimos 2 s para detectar reposo real.
+    final ahora = DateTime.now().millisecondsSinceEpoch;
+    _ventanaAceleracion.add((ahora, intensidad));
+    while (_ventanaAceleracion.isNotEmpty &&
+        ahora - _ventanaAceleracion.first.$1 > _ventanaReposoMs) {
+      _ventanaAceleracion.removeAt(0);
+    }
+    final moviendose = !_sensorEnReposo;
     if (moviendose != _estaMoviendose && mounted) {
       setState(() => _estaMoviendose = moviendose);
     }
+  }
+
+  /// true si el acelerÃ³metro indica que el telÃ©fono estÃ¡ quieto: durante
+  /// los Ãºltimos 2 s ningÃºn pico superÃ³ el umbral. Un paso al caminar
+  /// produce picos de 1-3 m/sÂ²; el telÃ©fono quieto (mesa o mano) < 0.4.
+  bool get _sensorEnReposo {
+    if (_ventanaAceleracion.isEmpty) return false;
+    final ahora = DateTime.now().millisecondsSinceEpoch;
+    final primero = _ventanaAceleracion.first.$1;
+    final ultimo = _ventanaAceleracion.last.$1;
+    // Sin datos recientes (sensor detenido) o ventana incompleta: no se asume reposo.
+    if (ahora - ultimo > 1000 || ultimo - primero < _ventanaReposoMs * 0.75) {
+      return false;
+    }
+    return _ventanaAceleracion.every((m) => m.$2 < _umbralReposo);
   }
 
   Future<void> _detenerRegistro() async {
@@ -759,10 +787,10 @@ class _PantallaMovimientoState extends State<PantallaMovimiento>
   }
 
   String _tipoMovimiento(double velocidadKmh, double aceleracionPromedio) {
-    if (velocidadKmh >= 18) return 'Vehículo';
+    if (velocidadKmh >= 18) return 'VehÃ­culo';
     if (velocidadKmh >= 7) return 'Corriendo';
     if (velocidadKmh >= 1.5) return 'Caminando';
-    if (aceleracionPromedio > 1.2) return 'Teléfono en movimiento';
+    if (aceleracionPromedio > 1.2) return 'TelÃ©fono en movimiento';
     return 'En reposo';
   }
 
@@ -820,7 +848,7 @@ class _PantallaMovimientoState extends State<PantallaMovimiento>
                     initialZoom: 15,
                     minZoom: 3,
                     maxZoom: 19,
-                    // Sin rotación: el mapa queda siempre con el norte arriba
+                    // Sin rotaciÃ³n: el mapa queda siempre con el norte arriba
                     // y la flecha indica el rumbo real.
                     interactionOptions: const InteractionOptions(
                       flags: InteractiveFlag.all & ~InteractiveFlag.rotate,
@@ -834,7 +862,7 @@ class _PantallaMovimientoState extends State<PantallaMovimiento>
                       urlTemplate: _mapTileUrl,
                       retinaMode: RetinaMode.isHighDensity(context),
                       // CARTO solo publica mosaicos hasta z18 (z19+ da 403 y
-                      // dejaba el mapa en blanco); más cerca se amplía el z18.
+                      // dejaba el mapa en blanco); mÃ¡s cerca se amplÃ­a el z18.
                       maxNativeZoom: 18,
                       evictErrorTileStrategy:
                           EvictErrorTileStrategy.notVisibleRespectMargin,
@@ -969,7 +997,7 @@ class _PantallaMovimientoState extends State<PantallaMovimiento>
       builder: (context) => SizedBox(
         height: 360,
         child: _historial.isEmpty
-            ? const Center(child: Text('Todavía no hay recorridos guardados.'))
+            ? const Center(child: Text('TodavÃ­a no hay recorridos guardados.'))
             : ListView.builder(
                 itemCount: _historial.length,
                 itemBuilder: (context, index) {
@@ -978,9 +1006,9 @@ class _PantallaMovimientoState extends State<PantallaMovimiento>
                     leading: const Icon(Icons.route_rounded),
                     title: Text('Recorrido ${_historial.length - index}'),
                     subtitle: Text(
-                      '${_formatearFecha(registro.fechaInicio)} · ${registro.tipoMovimiento}\n'
-                      '${_formatearDistancia(registro.distanciaMetros)} · ${_formatearDuracion(registro.duracion)} · '
-                      '${registro.velocidadPromedioKmh.toStringAsFixed(1)} km/h · batería ${registro.bateriaFin}%',
+                      '${_formatearFecha(registro.fechaInicio)} Â· ${registro.tipoMovimiento}\n'
+                      '${_formatearDistancia(registro.distanciaMetros)} Â· ${_formatearDuracion(registro.duracion)} Â· '
+                      '${registro.velocidadPromedioKmh.toStringAsFixed(1)} km/h Â· baterÃ­a ${registro.bateriaFin}%',
                     ),
                     trailing: IconButton(
                       tooltip: 'Compartir recorrido',
@@ -1023,8 +1051,8 @@ class _PantallaMovimientoState extends State<PantallaMovimiento>
               ),
               const SizedBox(height: 12),
               const Text(
-                'La mayoría de los GPS de celular entregan 1 lectura por segundo; '
-                'con 250-500 ms se recibe cada lectura apenas está disponible.',
+                'La mayorÃ­a de los GPS de celular entregan 1 lectura por segundo; '
+                'con 250-500 ms se recibe cada lectura apenas estÃ¡ disponible.',
               ),
             ],
           ),
@@ -1072,12 +1100,12 @@ class _PantallaMovimientoState extends State<PantallaMovimiento>
 
   Fecha: ${_formatearFecha(registro.fechaInicio)}
   Tipo de movimiento: ${registro.tipoMovimiento}
-  Duración: ${_formatearDuracion(registro.duracion)}
+  DuraciÃ³n: ${_formatearDuracion(registro.duracion)}
   Distancia: ${_formatearDistancia(registro.distanciaMetros)}
   Velocidad promedio: ${registro.velocidadPromedioKmh.toStringAsFixed(1)} km/h
-  Velocidad máxima: ${registro.velocidadMaximaKmh.toStringAsFixed(1)} km/h
-  Aceleración promedio: ${registro.aceleracionPromedio.toStringAsFixed(2)} m/s2
-  Batería: ${registro.bateriaInicio}% al iniciar, ${registro.bateriaFin}% al finalizar
+  Velocidad mÃ¡xima: ${registro.velocidadMaximaKmh.toStringAsFixed(1)} km/h
+  AceleraciÃ³n promedio: ${registro.aceleracionPromedio.toStringAsFixed(2)} m/s2
+  BaterÃ­a: ${registro.bateriaInicio}% al iniciar, ${registro.bateriaFin}% al finalizar
   Puntos GPS registrados: ${registro.puntos.length}
   $coordenadas''';
     await Share.share(contenido, subject: 'Datos de movimiento - Rastro');
@@ -1139,9 +1167,11 @@ class _EstadoRegistro extends StatelessWidget {
     } else if (pausado) {
       titulo = 'Recorrido en pausa';
     } else if (esperandoFix) {
-      titulo = 'Buscando señal GPS...';
+      titulo = 'Buscando seÃ±al GPS...';
     } else {
-      titulo = moviendose ? 'Movimiento detectado' : 'Registrando recorrido';
+      titulo = moviendose
+          ? 'Movimiento detectado'
+          : 'En reposo Â· posiciÃ³n fija';
     }
     return Card(
       elevation: 2,
@@ -1171,7 +1201,7 @@ class _EstadoRegistro extends StatelessWidget {
                 ValueListenableBuilder<double>(
                   valueListenable: aceleracion,
                   builder: (context, valor, _) => Text(
-                    '${valor.toStringAsFixed(1)} m/s²',
+                    '${valor.toStringAsFixed(1)} m/sÂ²',
                     style: tema.textTheme.labelMedium,
                   ),
                 ),
@@ -1183,9 +1213,9 @@ class _EstadoRegistro extends StatelessWidget {
                 valueListenable: remoto,
                 builder: (context, estado, _) {
                   final (texto, color) = switch (estado.enlace) {
-                    EstadoEnlace.conectado => ('Servidor en línea', Colors.green),
+                    EstadoEnlace.conectado => ('Servidor en lÃ­nea', Colors.green),
                     EstadoEnlace.conectando => ('Conectando...', Colors.orange),
-                    EstadoEnlace.desconectado => ('Sin conexión', Colors.red),
+                    EstadoEnlace.desconectado => ('Sin conexiÃ³n', Colors.red),
                   };
                   return Row(
                     children: [
@@ -1197,10 +1227,10 @@ class _EstadoRegistro extends StatelessWidget {
                             texto,
                             if (estado.rttMs != null) 'RTT ${estado.rttMs} ms',
                             if (estado.latenciaAckMs != null)
-                              'confirmación ${estado.latenciaAckMs} ms',
+                              'confirmaciÃ³n ${estado.latenciaAckMs} ms',
                             if (estado.pendientes > 0)
                               '${estado.pendientes} en cola',
-                          ].join(' · '),
+                          ].join(' Â· '),
                           style: tema.textTheme.labelSmall,
                           overflow: TextOverflow.ellipsis,
                         ),
@@ -1223,7 +1253,7 @@ class _EstadoRegistro extends StatelessWidget {
                             ),
                             const SizedBox(width: 6),
                             Text(
-                              'Señal GPS débil: lecturas imprecisas descartadas',
+                              'SeÃ±al GPS dÃ©bil: lecturas imprecisas descartadas',
                               style: tema.textTheme.labelSmall,
                             ),
                           ],
@@ -1294,10 +1324,10 @@ class _PanelInferior extends StatelessWidget {
                           : '${(distanciaMetros / 1000).toStringAsFixed(2)} km',
                     ),
                     _DatoResumen(
-                      titulo: 'Precisión',
+                      titulo: 'PrecisiÃ³n',
                       valor: t.precision == null
                           ? '--'
-                          : '±${t.precision!.toStringAsFixed(0)} m',
+                          : 'Â±${t.precision!.toStringAsFixed(0)} m',
                     ),
                     _DatoResumen(
                       titulo: 'GPS',
@@ -1311,7 +1341,7 @@ class _PanelInferior extends StatelessWidget {
               const SizedBox(height: 4),
               Text(
                 '$cantidadPuntos puntos'
-                '${deviceId.isEmpty ? '' : ' · $deviceId'}',
+                '${deviceId.isEmpty ? '' : ' Â· $deviceId'}',
                 textAlign: TextAlign.center,
                 style: tema.textTheme.labelSmall,
                 overflow: TextOverflow.ellipsis,

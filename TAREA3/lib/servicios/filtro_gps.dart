@@ -58,10 +58,12 @@ class FiltroGps {
   int _tiempoMs = 0;
   double? _ultimoRumbo;
   int _rechazosSeguidos = 0;
+  bool _veniaDeReposo = false;
 
   bool get inicializado => _varianza >= 0;
 
   void reiniciar() {
+    _veniaDeReposo = false;
     _lat = null;
     _lng = null;
     _varianza = -1;
@@ -77,6 +79,7 @@ class FiltroGps {
     required double velocidad,
     required double rumbo,
     required int tiempoMs,
+    bool sensorEnReposo = false,
   }) {
     if (!latitud.isFinite || !longitud.isFinite) return null;
     final precisionValida = precision.isFinite && precision > 0 ? precision : 30.0;
@@ -111,6 +114,31 @@ class FiltroGps {
       return null;
     }
     _rechazosSeguidos = 0;
+
+    // Reposo detectado por el acelerómetro (fusión de sensores, "ZUPT"):
+    // el teléfono no se mueve, así que los saltos del GPS son ruido. La
+    // posición queda fija y solo se promedia muy lentamente para afinarla.
+    // Si el GNSS reporta velocidad real (p. ej. vehículo a ritmo constante)
+    // o el salto es enorme, se procesa normalmente.
+    final reposo = sensorEnReposo &&
+        velocidadValida < 1.0 &&
+        distancia < math.max(50.0, precisionValida * 3);
+    if (reposo) {
+      _tiempoMs = tiempoMs;
+      _varianza += dtMs * 0.05 * 0.05 / 1000;
+      final r = math.pow(precisionValida * 4, 2).toDouble();
+      final k = _varianza / (_varianza + r);
+      _lat = _lat! + k * (latitud - _lat!);
+      _lng = _lng! + k * (longitud - _lng!);
+      _varianza = (1 - k) * _varianza;
+      _veniaDeReposo = true;
+      return _resultado(0, null, false);
+    }
+    if (_veniaDeReposo) {
+      // Se vuelve a mover: se "suelta" el filtro para no arrastrar retraso.
+      _veniaDeReposo = false;
+      _varianza = math.max(_varianza, precisionValida * precisionValida);
+    }
 
     // Predicción: la incertidumbre crece con el tiempo y con la velocidad.
     // La velocidad Doppler del GNSS es muy fiable en reposo: si es ~0 el
