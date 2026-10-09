@@ -25,6 +25,22 @@ flutter build apk --release
 & "$env:LOCALAPPDATA\Android\Sdk\platform-tools\adb.exe" install -r build\app\outputs\flutter-apk\app-release.apk
 ```
 
+## Mapas
+
+Se elige con el botón de capas (app) o el selector arriba a la derecha (panel):
+
+| Mapa | Clave | Zoom con imagen real |
+| --- | --- | --- |
+| Satélite / Satélite + calles (Esri) | No | 19 |
+| Calles (OpenStreetMap) | No | 19 |
+| CARTO Voyager | Incluida | 18 |
+| MapTiler Satélite HD (por defecto) | Incluida | 20 |
+
+**Cambiar la clave de MapTiler:** https://cloud.maptiler.com → **API keys**. Luego:
+
+- App: `flutter build apk --release --dart-define=MAPTILER_KEY=nueva_clave`
+- Panel: `const MAPTILER_KEY` en `backend/public/index.html`.
+
 ## Pruebas
 
 ```powershell

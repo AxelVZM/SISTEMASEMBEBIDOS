@@ -18,9 +18,10 @@ import 'modelos/ubicacion_local.dart';
 import 'servicios/base_datos_local.dart';
 import 'servicios/detector_pasos.dart';
 import 'servicios/filtro_gps.dart';
+import 'servicios/mapas.dart';
 import 'servicios/seguimiento_remoto.dart';
 
-const _versionApp = '2.2.0';
+const _versionApp = '2.3.0';
 const _canalPantalla = MethodChannel('movimiento/pantalla');
 
 /// Mantiene la pantalla encendida mientras se registra (solo Android).
@@ -158,21 +159,21 @@ class PantallaMovimiento extends StatefulWidget {
 
 class _PantallaMovimientoState extends State<PantallaMovimiento> {
   static const _ubicacionInicial = LatLng(-13.53195, -71.96746);
-  static const _cartoApiKey = String.fromEnvironment(
-    'CARTO_API_KEY',
-    defaultValue: 'cb1_4f7e_1_cec811c28cf2ef52dd7565da',
-  );
   static const _intervalosDisponibles = [250, 500, 1000, 2000];
 
   final _mapController = MapController();
   final _bateria = Battery();
   final _baseDatos = BaseDatosLocal.instancia;
   final _seguimientoRemoto = SeguimientoRemoto();
-  final _filtro = FiltroGps();
+  // Se descartan lecturas con más de ±25 m de error.
+  final _filtro = FiltroGps(precisionMaxima: 25);
   final _historial = <RegistroMovimiento>[];
 
   /// Segmentos del recorrido (se abre uno nuevo al reanudar tras una pausa).
   final _segmentos = <List<LatLng>>[];
+
+  /// Precisión (m) de cada punto de [_segmentos], para colorearlo.
+  final _precisionesRuta = <List<double>>[];
 
   // Valores que cambian muchas veces por segundo: se notifican sin
   // reconstruir toda la pantalla (el acelerómetro antes redibujaba el mapa
@@ -219,9 +220,11 @@ class _PantallaMovimientoState extends State<PantallaMovimiento> {
   String _deviceId = '';
   int _intervaloMilisegundos = 500;
   String? _mensaje;
+  CapaMapa _capa = CapaMapa.desdeNombre(null);
 
-  String get _mapTileUrl =>
-      'https://basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png?key=$_cartoApiKey';
+  /// GPS satelital puro (LocationManager GPS_PROVIDER): sin mezclar WiFi ni
+  /// antenas. Más consistente al aire libre; bajo techo puede no haber señal.
+  bool _gpsSatelitalPuro = false;
 
   List<LatLng> get _todosLosPuntos => [for (final s in _segmentos) ...s];
 
@@ -245,9 +248,13 @@ class _PantallaMovimientoState extends State<PantallaMovimiento> {
       await preferencias.setString('device_id', deviceId);
     }
     final intervalo = preferencias.getInt('intervalo_gps') ?? 500;
+    final capa = CapaMapa.desdeNombre(preferencias.getString('capa_mapa'));
+    final gpsPuro = preferencias.getBool('gps_satelital_puro') ?? false;
     if (!mounted) return;
     setState(() {
       _deviceId = deviceId!;
+      _capa = capa;
+      _gpsSatelitalPuro = gpsPuro;
       _intervaloMilisegundos = _intervalosDisponibles.contains(intervalo)
           ? intervalo
           : 500;
@@ -364,6 +371,7 @@ class _PantallaMovimientoState extends State<PantallaMovimiento> {
     if (!mounted) return;
     setState(() {
       _segmentos.clear();
+      _precisionesRuta.clear();
       _nuevoSegmento = true;
       _registrando = true;
       _esperandoFix = true;
@@ -424,6 +432,8 @@ class _PantallaMovimientoState extends State<PantallaMovimiento> {
         // 0 m: antes con 5 m, caminando solo llegaba un punto cada 3-4 s.
         distanceFilter: 0,
         intervalDuration: Duration(milliseconds: _intervaloMilisegundos),
+        // true: solo satélites (GPS_PROVIDER), sin mezclar WiFi/antenas.
+        forceLocationManager: _gpsSatelitalPuro,
         foregroundNotificationConfig: _usarServicioPrimerPlano
             ? const ForegroundNotificationConfig(
                 notificationTitle:
@@ -587,11 +597,13 @@ class _PantallaMovimientoState extends State<PantallaMovimiento> {
     final primerFix = _esperandoFix;
     if (_nuevoSegmento || _segmentos.isEmpty) {
       _segmentos.add([punto]);
+      _precisionesRuta.add([lectura.precision]);
       _nuevoSegmento = false;
     } else if (lectura.esCorreccion) {
       // Lectura mucho más precisa estando quieto: corrige el último punto
       // (no es un desplazamiento, no se dibuja tramo ni se suma distancia).
       _segmentos.last[_segmentos.last.length - 1] = punto;
+      _precisionesRuta.last[_precisionesRuta.last.length - 1] = lectura.precision;
     } else {
       final segmento = _segmentos.last;
       final distancia = Geolocator.distanceBetween(
@@ -602,6 +614,7 @@ class _PantallaMovimientoState extends State<PantallaMovimiento> {
       );
       if (distancia >= 0.5) {
         segmento.add(punto);
+        _precisionesRuta.last.add(lectura.precision);
         _distanciaMetros += distancia;
       }
     }
@@ -815,6 +828,11 @@ class _PantallaMovimientoState extends State<PantallaMovimiento> {
         title: const Text('Rastro'),
         actions: [
           IconButton(
+            tooltip: 'Mapa y precisión',
+            onPressed: _mostrarOpcionesMapa,
+            icon: const Icon(Icons.layers_rounded),
+          ),
+          IconButton(
             tooltip: 'Configurar intervalo GPS',
             onPressed: _mostrarConfiguracionIntervalo,
             icon: const Icon(Icons.tune_rounded),
@@ -849,11 +867,13 @@ class _PantallaMovimientoState extends State<PantallaMovimiento> {
                   ),
                   children: [
                     TileLayer(
-                      urlTemplate: _mapTileUrl,
-                      retinaMode: RetinaMode.isHighDensity(context),
-                      // CARTO solo publica mosaicos hasta z18 (z19+ da 403 y
-                      // dejaba el mapa en blanco); más cerca se amplía el z18.
-                      maxNativeZoom: 18,
+                      key: ValueKey(_capa),
+                      urlTemplate: _capa.url,
+                      retinaMode: _capa.tieneRetina &&
+                          RetinaMode.isHighDensity(context),
+                      // Más allá del zoom nativo se amplía la última imagen
+                      // (pedir más zoom da error y deja el mapa en blanco).
+                      maxNativeZoom: _capa.zoomNativoMaximo,
                       evictErrorTileStrategy:
                           EvictErrorTileStrategy.notVisibleRespectMargin,
                       // Precarga mosaicos alrededor para no ver huecos grises al moverse.
@@ -861,6 +881,13 @@ class _PantallaMovimientoState extends State<PantallaMovimiento> {
                       panBuffer: 1,
                       userAgentPackageName: 'com.example.app',
                     ),
+                    if (_capa.superposicion != null)
+                      TileLayer(
+                        key: ValueKey('${_capa.name}-calles'),
+                        urlTemplate: _capa.superposicion,
+                        maxNativeZoom: _capa.zoomNativoMaximo,
+                        userAgentPackageName: 'com.example.app',
+                      ),
                     if (_segmentos.isNotEmpty)
                       PolylineLayer(
                         polylines: [
@@ -868,23 +895,28 @@ class _PantallaMovimientoState extends State<PantallaMovimiento> {
                             if (segmento.length > 1)
                               Polyline(
                                 points: segmento,
-                                color: color,
+                                // Cian con borde oscuro: visible sobre
+                                // satélite y sobre mapa de calles.
+                                color: const Color(0xff00e5ff),
                                 strokeWidth: 4,
+                                borderColor: Colors.black54,
+                                borderStrokeWidth: 1.5,
                               ),
                         ],
                       ),
-                    // Un punto por cada lectura real del GPS (vértices de la ruta).
+                    // Un punto por cada lectura real del GPS (vértices de la
+                    // ruta), coloreado según su precisión.
                     if (_segmentos.isNotEmpty)
                       CircleLayer(
                         circles: [
-                          for (final segmento in _segmentos)
-                            for (final punto in segmento)
+                          for (var s = 0; s < _segmentos.length; s++)
+                            for (var p = 0; p < _segmentos[s].length; p++)
                               CircleMarker(
-                                point: punto,
-                                radius: 3,
-                                color: Colors.white,
-                                borderColor: color,
-                                borderStrokeWidth: 2,
+                                point: _segmentos[s][p],
+                                radius: 4,
+                                color: _colorPrecision(_precisionesRuta[s][p]),
+                                borderColor: Colors.black,
+                                borderStrokeWidth: 1.2,
                               ),
                         ],
                       ),
@@ -925,9 +957,9 @@ class _PantallaMovimientoState extends State<PantallaMovimiento> {
                       },
                     ),
                     RichAttributionWidget(
-                      attributions: const [
-                        TextSourceAttribution('OpenStreetMap contributors'),
-                        TextSourceAttribution('CARTO'),
+                      attributions: [
+                        for (final texto in _capa.atribuciones)
+                          TextSourceAttribution(texto),
                       ],
                     ),
                   ],
@@ -1010,6 +1042,84 @@ class _PantallaMovimientoState extends State<PantallaMovimiento> {
                   );
                 },
               ),
+      ),
+    );
+  }
+
+  /// Verde ≤ 5 m, amarillo ≤ 10 m, naranja ≤ 20 m, rojo peor.
+  Color _colorPrecision(double metros) {
+    if (metros <= 5) return const Color(0xff2ecc71);
+    if (metros <= 10) return const Color(0xfff1c40f);
+    if (metros <= 20) return const Color(0xffe67e22);
+    return const Color(0xffe74c3c);
+  }
+
+  Future<void> _mostrarOpcionesMapa() async {
+    await showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      isScrollControlled: true,
+      builder: (context) => StatefulBuilder(
+        builder: (context, actualizar) => SafeArea(
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Padding(
+                  padding: EdgeInsets.fromLTRB(20, 0, 20, 4),
+                  child: Text('Mapa', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                ),
+                RadioGroup<CapaMapa>(
+                  groupValue: _capa,
+                  onChanged: (capa) async {
+                    if (capa == null || !capa.disponible) return;
+                    setState(() => _capa = capa);
+                    actualizar(() {});
+                    final preferencias = await SharedPreferences.getInstance();
+                    await preferencias.setString('capa_mapa', capa.name);
+                  },
+                  child: Column(
+                    children: [
+                      for (final capa in CapaMapa.values)
+                        RadioListTile<CapaMapa>(
+                          value: capa,
+                          enabled: capa.disponible,
+                          title: Text(capa.nombre),
+                          subtitle: capa.disponible
+                              ? null
+                              : const Text('Requiere clave de MapTiler (ver README)'),
+                        ),
+                    ],
+                  ),
+                ),
+                const Divider(),
+                SwitchListTile(
+                  value: _gpsSatelitalPuro,
+                  title: const Text('GPS satelital puro'),
+                  subtitle: const Text(
+                    'Usa solo satélites, sin mezclar WiFi ni antenas: puntos más '
+                    'consistentes al aire libre. Bajo techo puede no haber señal.',
+                  ),
+                  onChanged: (valor) async {
+                    setState(() => _gpsSatelitalPuro = valor);
+                    actualizar(() {});
+                    final preferencias = await SharedPreferences.getInstance();
+                    await preferencias.setBool('gps_satelital_puro', valor);
+                    if (_registrando && !_pausado) _suscribirSensores();
+                  },
+                ),
+                const Padding(
+                  padding: EdgeInsets.fromLTRB(20, 4, 20, 16),
+                  child: Text(
+                    'Color de cada punto: verde ≤ 5 m · amarillo ≤ 10 m · '
+                    'naranja ≤ 20 m de error.',
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }

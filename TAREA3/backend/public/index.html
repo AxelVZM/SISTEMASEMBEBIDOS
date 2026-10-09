@@ -110,11 +110,31 @@
       setTimeout(() => el.remove(), 2500);
     }
 
+    // Clave opcional de MapTiler (satélite HD). Vacía = no se muestra esa opción.
+    const MAPTILER_KEY = 'yxn2mt7w4WZM5gDIMwrS';
     const map = L.map('map', { zoomControl: true, preferCanvas: true }).setView([-13.53195, -71.96746], 14);
-    L.tileLayer(`https://basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png?key=${CARTO_KEY}`, {
-      maxZoom: 20, maxNativeZoom: 18, // CARTO no publica z19+ (403)
-      attribution: '&copy; OpenStreetMap contributors &copy; CARTO',
-    }).addTo(map);
+    const ESRI = 'https://server.arcgisonline.com/ArcGIS/rest/services';
+    const esriAttr = 'Tiles &copy; Esri, Maxar, Earthstar Geographics';
+    const capas = {
+      'Satélite': L.tileLayer(`${ESRI}/World_Imagery/MapServer/tile/{z}/{y}/{x}`, { maxZoom: 21, maxNativeZoom: 19, attribution: esriAttr }),
+      'Satélite + calles': L.layerGroup([
+        L.tileLayer(`${ESRI}/World_Imagery/MapServer/tile/{z}/{y}/{x}`, { maxZoom: 21, maxNativeZoom: 19, attribution: esriAttr }),
+        L.tileLayer(`${ESRI}/Reference/World_Transportation/MapServer/tile/{z}/{y}/{x}`, { maxZoom: 21, maxNativeZoom: 19 }),
+      ]),
+      'Calles (OpenStreetMap)': L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 21, maxNativeZoom: 19, attribution: '&copy; OpenStreetMap contributors' }),
+      'CARTO Voyager': L.tileLayer(`https://basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png?key=${CARTO_KEY}`, { maxZoom: 21, maxNativeZoom: 18, attribution: '&copy; OpenStreetMap contributors &copy; CARTO' }),
+    };
+    if (MAPTILER_KEY) {
+      capas['MapTiler Satélite HD'] = L.tileLayer(`https://api.maptiler.com/maps/satellite/256/{z}/{x}/{y}{r}.jpg?key=${MAPTILER_KEY}`, { maxZoom: 21, maxNativeZoom: 20, attribution: '&copy; MapTiler &copy; OpenStreetMap contributors' });
+    }
+    let capaGuardada = MAPTILER_KEY ? 'MapTiler Satélite HD' : 'Satélite + calles';
+    try { capaGuardada = localStorage.getItem('capaMapa') || capaGuardada; } catch { /* sin almacenamiento */ }
+    (capas[capaGuardada] || capas['Satélite + calles']).addTo(map);
+    L.control.layers(capas, null, { position: 'topright', collapsed: false }).addTo(map);
+    map.on('baselayerchange', (e) => { try { localStorage.setItem('capaMapa', e.name); } catch { /* sin almacenamiento */ } });
+
+    // Color de cada punto según su precisión.
+    const colorPrecision = (m) => (m == null ? '#ffffff' : m <= 5 ? '#2ecc71' : m <= 10 ? '#f1c40f' : m <= 20 ? '#e67e22' : '#e74c3c');
     map.on('dragstart', () => setFollow(false));
 
     function setFollow(value) {
@@ -138,7 +158,7 @@
         const color = colorFor(deviceId);
         track = {
           color, marker: null, accuracy: null, last: null, prevTime: null, hz: 0, heading: 0, visible: true,
-          line: L.polyline([], { color, weight: 4, opacity: 0.9 }).addTo(map),
+          line: L.polyline([], { color, weight: 4, opacity: 0.95 }).addTo(map),
           points: L.layerGroup().addTo(map),
         };
         state.tracks.set(deviceId, track);
@@ -155,7 +175,7 @@
     function addRoutePoint(track, loc) {
       const point = [loc.latitude, loc.longitude];
       track.line.addLatLng(point);
-      L.circleMarker(point, { radius: 3, color: track.color, weight: 2, fillColor: '#fff', fillOpacity: 1 })
+      L.circleMarker(point, { radius: 4, color: '#000', weight: 1, fillColor: colorPrecision(loc.accuracy), fillOpacity: 1 })
         .bindTooltip(`${new Date(loc.timestamp).toLocaleTimeString()} · ±${(loc.accuracy ?? 0).toFixed(0)} m`)
         .addTo(track.points);
     }
@@ -201,8 +221,9 @@
         const puntos = track.line.getLatLngs();
         puntos[puntos.length - 1] = L.latLng(loc.latitude, loc.longitude);
         track.line.setLatLngs(puntos);
-        const capas = track.points.getLayers();
-        capas.at(-1)?.setLatLng([loc.latitude, loc.longitude]);
+        const ultimoPunto = track.points.getLayers().at(-1);
+        ultimoPunto?.setLatLng([loc.latitude, loc.longitude]);
+        ultimoPunto?.setStyle({ fillColor: colorPrecision(loc.accuracy) });
       } else {
         addRoutePoint(track, loc);
       }
