@@ -35,6 +35,7 @@ Se elige con el botón de capas (app) o el selector arriba a la derecha (panel):
 | Calles (OpenStreetMap) | No | 19 |
 | CARTO Voyager | Incluida | 18 |
 | MapTiler Satélite HD (por defecto) | Incluida | 20 |
+| MapTiler Calles | Incluida | 20 |
 
 **Cambiar la clave de MapTiler:** https://cloud.maptiler.com → **API keys**. Luego:
 

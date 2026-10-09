@@ -4,13 +4,14 @@
 ///   zoom 19, sin clave. Ideal para comprobar la precisión del GPS.
 /// - Calles (OpenStreetMap): nombres de calles detallados, sin clave.
 /// - CARTO Voyager: el mapa anterior.
-/// - MapTiler Satélite HD: requiere clave gratuita (ver README).
+/// - MapTiler Satélite HD y MapTiler Calles: requieren clave (ver README).
 enum CapaMapa {
   satelite('Satélite'),
   hibrido('Satélite + calles'),
   calles('Calles (OpenStreetMap)'),
   carto('CARTO Voyager'),
-  maptiler('MapTiler Satélite HD');
+  maptiler('MapTiler Satélite HD'),
+  maptilerCalles('MapTiler Calles');
 
   const CapaMapa(this.nombre);
 
@@ -29,7 +30,8 @@ enum CapaMapa {
   );
 
   /// false si el mapa necesita una clave que no está configurada.
-  bool get disponible => this != maptiler || _maptilerKey.isNotEmpty;
+  bool get disponible =>
+      (this != maptiler && this != maptilerCalles) || _maptilerKey.isNotEmpty;
 
   String get url => switch (this) {
     satelite || hibrido =>
@@ -39,6 +41,8 @@ enum CapaMapa {
       'https://basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png?key=$_cartoKey',
     maptiler =>
       'https://api.maptiler.com/maps/satellite/256/{z}/{x}/{y}{r}.jpg?key=$_maptilerKey',
+    maptilerCalles =>
+      'https://api.maptiler.com/maps/streets-v2/256/{z}/{x}/{y}{r}.png?key=$_maptilerKey',
   };
 
   /// Capa transparente con nombres de calles encima del satélite.
@@ -50,17 +54,21 @@ enum CapaMapa {
   int get zoomNativoMaximo => switch (this) {
     satelite || hibrido || calles => 19,
     carto => 18, // CARTO devuelve 403 desde z19.
-    maptiler => 20,
+    maptiler || maptilerCalles => 20,
   };
 
   /// Si el proveedor sirve imágenes @2x para pantallas de alta densidad.
-  bool get tieneRetina => this == carto || this == maptiler;
+  bool get tieneRetina =>
+      this == carto || this == maptiler || this == maptilerCalles;
 
   List<String> get atribuciones => switch (this) {
     satelite || hibrido => const ['Esri, Maxar, Earthstar Geographics'],
     calles => const ['OpenStreetMap contributors'],
     carto => const ['OpenStreetMap contributors', 'CARTO'],
-    maptiler => const ['MapTiler', 'OpenStreetMap contributors'],
+    maptiler || maptilerCalles => const [
+      'MapTiler',
+      'OpenStreetMap contributors',
+    ],
   };
 
   static CapaMapa desdeNombre(String? nombre) => CapaMapa.values.firstWhere(

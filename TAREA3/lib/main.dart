@@ -879,14 +879,15 @@ class _PantallaMovimientoState extends State<PantallaMovimiento> {
                       // Precarga mosaicos alrededor para no ver huecos grises al moverse.
                       keepBuffer: 4,
                       panBuffer: 1,
-                      userAgentPackageName: 'com.example.app',
+                      // OSM bloquea el identificador por defecto com.example.*.
+                      userAgentPackageName: 'pe.edu.unsaac.movimientogps',
                     ),
                     if (_capa.superposicion != null)
                       TileLayer(
                         key: ValueKey('${_capa.name}-calles'),
                         urlTemplate: _capa.superposicion,
                         maxNativeZoom: _capa.zoomNativoMaximo,
-                        userAgentPackageName: 'com.example.app',
+                        userAgentPackageName: 'pe.edu.unsaac.movimientogps',
                       ),
                     if (_segmentos.isNotEmpty)
                       PolylineLayer(

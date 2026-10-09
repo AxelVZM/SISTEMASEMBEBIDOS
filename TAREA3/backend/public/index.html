@@ -121,11 +121,16 @@
         L.tileLayer(`${ESRI}/World_Imagery/MapServer/tile/{z}/{y}/{x}`, { maxZoom: 21, maxNativeZoom: 19, attribution: esriAttr }),
         L.tileLayer(`${ESRI}/Reference/World_Transportation/MapServer/tile/{z}/{y}/{x}`, { maxZoom: 21, maxNativeZoom: 19 }),
       ]),
-      'Calles (OpenStreetMap)': L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 21, maxNativeZoom: 19, attribution: '&copy; OpenStreetMap contributors' }),
+      'Calles (OpenStreetMap)': L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        maxZoom: 21, maxNativeZoom: 19, attribution: '&copy; OpenStreetMap contributors',
+        // OSM bloquea (403) las peticiones sin Referer; el servidor manda no-referrer.
+        referrerPolicy: 'strict-origin-when-cross-origin',
+      }),
       'CARTO Voyager': L.tileLayer(`https://basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png?key=${CARTO_KEY}`, { maxZoom: 21, maxNativeZoom: 18, attribution: '&copy; OpenStreetMap contributors &copy; CARTO' }),
     };
     if (MAPTILER_KEY) {
       capas['MapTiler Satélite HD'] = L.tileLayer(`https://api.maptiler.com/maps/satellite/256/{z}/{x}/{y}{r}.jpg?key=${MAPTILER_KEY}`, { maxZoom: 21, maxNativeZoom: 20, attribution: '&copy; MapTiler &copy; OpenStreetMap contributors' });
+      capas['MapTiler Calles'] = L.tileLayer(`https://api.maptiler.com/maps/streets-v2/256/{z}/{x}/{y}{r}.png?key=${MAPTILER_KEY}`, { maxZoom: 21, maxNativeZoom: 20, attribution: '&copy; MapTiler &copy; OpenStreetMap contributors' });
     }
     let capaGuardada = MAPTILER_KEY ? 'MapTiler Satélite HD' : 'Satélite + calles';
     try { capaGuardada = localStorage.getItem('capaMapa') || capaGuardada; } catch { /* sin almacenamiento */ }
