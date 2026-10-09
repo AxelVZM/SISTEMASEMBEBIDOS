@@ -84,7 +84,37 @@ function saveMeta() {
 }
 saveMeta();
 
-const locationsStream = fs.createWriteStream(locationsFile, { flags: 'a' });
+let locationsStream = fs.createWriteStream(locationsFile, { flags: 'a' });
+// Mientras se reescribe el archivo (borrado de rutas) las nuevas líneas esperan aquí.
+let compacting = null;
+const pendingLines = [];
+
+function appendLocationLine(line) {
+  if (compacting) pendingLines.push(line);
+  else locationsStream.write(line);
+}
+
+// Elimina del archivo NDJSON todas las ubicaciones de los dispositivos indicados.
+function removeLocationsFromFile(deviceIds) {
+  const run = async () => {
+    await new Promise((resolve) => locationsStream.end(resolve));
+    const tmp = locationsFile + '.tmp';
+    try {
+      const content = fs.existsSync(locationsFile) ? await fs.promises.readFile(locationsFile, 'utf8') : '';
+      const kept = content.split('\n').filter((line) => {
+        if (!line.trim()) return false;
+        try { return !deviceIds.has(JSON.parse(line).deviceId); } catch { return false; }
+      });
+      await fs.promises.writeFile(tmp, kept.length ? kept.join('\n') + '\n' : '');
+      await fs.promises.rename(tmp, locationsFile);
+    } finally {
+      locationsStream = fs.createWriteStream(locationsFile, { flags: 'a' });
+      for (const line of pendingLines.splice(0)) locationsStream.write(line);
+    }
+  };
+  compacting = (compacting || Promise.resolve()).then(run).finally(() => { compacting = null; });
+  return compacting;
+}
 let lastSeenDirty = false;
 // last_seen/battery cambian en cada muestra: se guardan como mucho cada 5 s.
 setInterval(() => { if (lastSeenDirty) { lastSeenDirty = false; saveMeta(); } }, 5000).unref();
@@ -204,7 +234,7 @@ function acceptLocation(deviceId, body) {
     latencyMs,
   };
   indexLocation(location);
-  locationsStream.write(JSON.stringify(location) + '\n');
+  appendLocationLine(JSON.stringify(location) + '\n');
 
   // Solo las muestras "en vivo" cuentan para la métrica de latencia (no la cola offline).
   if (body.live !== false && latencyMs < 60_000) {
@@ -272,6 +302,39 @@ app.post('/api/devices/:deviceId/locations/batch', (req, res) => {
   return res.json({ ok: true, accepted });
 });
 
+// Borra la ruta (todas las ubicaciones) de un dispositivo, sin eliminarlo.
+app.delete('/api/devices/:deviceId/locations', async (req, res) => {
+  const deviceId = String(req.params.deviceId);
+  if (!data.devices.some((device) => device.device_id === deviceId)) return res.status(404).json({ error: 'Dispositivo no registrado' });
+  locationsByDevice.delete(deviceId);
+  try {
+    await removeLocationsFromFile(new Set([deviceId]));
+  } catch (error) {
+    console.error('No se pudo borrar la ruta', error);
+    return res.status(500).json({ error: 'No se pudo borrar la ruta del disco' });
+  }
+  broadcast({ type: 'route.cleared', data: { deviceId } });
+  return res.json({ ok: true });
+});
+
+// Elimina el dispositivo y su ruta. Si el celular sigue enviando datos,
+// volverá a aparecer como dispositivo nuevo.
+app.delete('/api/devices/:deviceId', async (req, res) => {
+  const deviceId = String(req.params.deviceId);
+  const index = data.devices.findIndex((device) => device.device_id === deviceId);
+  if (index === -1) return res.status(404).json({ error: 'Dispositivo no registrado' });
+  data.devices.splice(index, 1);
+  locationsByDevice.delete(deviceId);
+  saveMeta();
+  try {
+    await removeLocationsFromFile(new Set([deviceId]));
+  } catch (error) {
+    console.error('No se pudo borrar la ruta', error);
+  }
+  broadcast({ type: 'device.removed', data: { deviceId } });
+  return res.json({ ok: true });
+});
+
 app.get('/api/metrics', (_req, res) => {
   const sorted = [...latencySamples].sort((a, b) => a - b);
   const percentile = (ratio) => (sorted.length ? sorted[Math.min(sorted.length - 1, Math.floor((sorted.length - 1) * ratio))] : null);
@@ -303,10 +366,11 @@ app.get('/api/devices/:deviceId/history', (req, res) => {
   if (!data.devices.some((device) => device.device_id === req.params.deviceId)) return res.status(404).json({ error: 'Dispositivo no registrado' });
   const list = locationsByDevice.get(req.params.deviceId) || [];
   let locations;
-  if (req.query.activeOnly === 'true') {
-    // Recorrido actual: muestras contiguas desde el final sin huecos mayores a activeWindowMs.
+  if (req.query.activeOnly === 'true' || req.query.lastSession === 'true') {
+    // Recorrido actual/último: muestras contiguas desde el final sin huecos
+    // mayores a activeWindowMs. activeOnly además exige que sea reciente.
     const last = list.at(-1);
-    if (!last || Date.now() - Date.parse(last.receivedAt || last.timestamp) > activeWindowMs) {
+    if (!last || (req.query.activeOnly === 'true' && Date.now() - Date.parse(last.receivedAt || last.timestamp) > activeWindowMs)) {
       locations = [];
     } else {
       let start = list.length - 1;
@@ -416,7 +480,8 @@ const heartbeat = setInterval(() => {
 }, 15000);
 websocketServer.on('close', () => clearInterval(heartbeat));
 
-function shutdown() {
+async function shutdown() {
+  if (compacting) await compacting.catch(() => {});
   locationsStream.end();
   fs.writeFileSync(dbFile, JSON.stringify(data));
   process.exit(0);

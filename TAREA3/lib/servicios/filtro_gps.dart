@@ -2,7 +2,7 @@ import 'dart:math' as math;
 
 import 'package:latlong2/latlong.dart';
 
-/// Resultado de procesar una lectura del GPS.
+/// Resultado de validar una lectura del GPS.
 class LecturaFiltrada {
   const LecturaFiltrada({
     required this.punto,
@@ -10,12 +10,13 @@ class LecturaFiltrada {
     required this.velocidad,
     required this.rumbo,
     required this.enMovimiento,
+    required this.esNuevo,
   });
 
-  /// Posición suavizada.
+  /// Posición real del GPS (sin suavizar ni interpolar).
   final LatLng punto;
 
-  /// Incertidumbre estimada del filtro en metros (1 sigma).
+  /// Precisión reportada por el GPS en metros.
   final double precision;
 
   /// Velocidad en m/s.
@@ -24,54 +25,45 @@ class LecturaFiltrada {
   /// Rumbo en grados (0 = norte), o null si no se conoce.
   final double? rumbo;
 
-  /// true si el desplazamiento supera el ruido del GPS.
+  /// true si el punto representa un desplazamiento real.
   final bool enMovimiento;
+
+  /// true si es una lectura nueva aceptada; false si se mantiene el último
+  /// punto real porque el teléfono está quieto (la lectura era ruido).
+  final bool esNuevo;
 }
 
-/// Filtro de Kalman 2D para GPS (modelo de posición con ruido de proceso
-/// proporcional a la velocidad) más rechazo de lecturas atípicas.
+/// Validador de lecturas GPS, punto por punto.
 ///
-/// Elimina el "temblor" del marcador cuando el teléfono está quieto y los
-/// saltos de varias decenas de metros que produce el GPS en ciudad, sin
-/// introducir retraso perceptible en movimiento.
+/// No suaviza ni inventa posiciones: cada punto aceptado es exactamente la
+/// lectura del GPS. Solo descarta lo que es claramente erróneo:
+/// - lecturas con precisión peor que [precisionMaxima];
+/// - saltos físicamente imposibles (más de [velocidadMaximaFisica] m/s);
+/// - el "ruido" cuando el acelerómetro indica que el teléfono está quieto
+///   (se mantiene el último punto real).
 class FiltroGps {
-  FiltroGps({
-    this.precisionMaxima = 40,
-    this.velocidadMaximaFisica = 70,
-    this.ruidoProcesoMinimo = 2.5,
-  });
+  FiltroGps({this.precisionMaxima = 30, this.velocidadMaximaFisica = 70});
 
-  /// Lecturas con precisión peor que esto (m) se descartan.
   final double precisionMaxima;
-
-  /// Saltos que implican más de esta velocidad (m/s) se consideran errores.
   final double velocidadMaximaFisica;
-
-  /// Ruido de proceso base en m/s.
-  final double ruidoProcesoMinimo;
 
   static const _metrosPorGradoLat = 111320.0;
 
-  double? _lat;
-  double? _lng;
-  double _varianza = -1;
+  LatLng? _ultimo;
+  double _precisionUltimo = 0;
   int _tiempoMs = 0;
   double? _ultimoRumbo;
   int _rechazosSeguidos = 0;
-  bool _veniaDeReposo = false;
 
-  bool get inicializado => _varianza >= 0;
+  bool get inicializado => _ultimo != null;
 
   void reiniciar() {
-    _veniaDeReposo = false;
-    _lat = null;
-    _lng = null;
-    _varianza = -1;
+    _ultimo = null;
     _ultimoRumbo = null;
     _rechazosSeguidos = 0;
   }
 
-  /// Procesa una lectura. Devuelve null si se descarta.
+  /// Valida una lectura. Devuelve null si se descarta.
   LecturaFiltrada? procesar({
     required double latitud,
     required double longitud,
@@ -82,32 +74,28 @@ class FiltroGps {
     bool sensorEnReposo = false,
   }) {
     if (!latitud.isFinite || !longitud.isFinite) return null;
-    final precisionValida = precision.isFinite && precision > 0 ? precision : 30.0;
+    final precisionValida = precision.isFinite && precision > 0 ? precision : 99.0;
     final velocidadValida = velocidad.isFinite && velocidad >= 0 ? velocidad : 0.0;
+    final punto = LatLng(latitud, longitud);
+    final ultimo = _ultimo;
 
-    if (!inicializado) {
-      // La primera lectura se acepta con un umbral más amplio para no
-      // quedarse esperando indefinidamente mientras el GPS "calienta".
-      if (precisionValida > precisionMaxima * 2.5) return null;
-      _lat = latitud;
-      _lng = longitud;
-      _varianza = precisionValida * precisionValida;
-      _tiempoMs = tiempoMs;
-      return _resultado(velocidadValida, rumbo, false);
+    if (ultimo == null) {
+      // Primer punto: umbral más amplio para no esperar indefinidamente.
+      if (precisionValida > precisionMaxima * 2) return null;
+      return _aceptar(punto, precisionValida, velocidadValida, rumbo, tiempoMs, false);
     }
 
     if (precisionValida > precisionMaxima) {
       _rechazosSeguidos++;
-      // Si llevamos muchas lecturas malas seguidas (túnel, interior) se
-      // reinicia el filtro para no quedarnos congelados en un punto viejo.
+      // Muchas lecturas malas seguidas (interior, túnel): se reinicia para
+      // aceptar la siguiente aunque esté lejos del último punto.
       if (_rechazosSeguidos > 15) reiniciar();
       return null;
     }
 
     final dtMs = math.max(1, tiempoMs - _tiempoMs);
-    final distancia = _distanciaMetros(_lat!, _lng!, latitud, longitud);
-    final velocidadImplicita = distancia / (dtMs / 1000);
-    if (velocidadImplicita > velocidadMaximaFisica &&
+    final distancia = _distanciaMetros(ultimo, punto);
+    if (distancia / (dtMs / 1000) > velocidadMaximaFisica &&
         distancia > precisionValida * 2 &&
         _rechazosSeguidos < 5) {
       _rechazosSeguidos++;
@@ -115,92 +103,70 @@ class FiltroGps {
     }
     _rechazosSeguidos = 0;
 
-    // Reposo detectado por el acelerómetro (fusión de sensores, "ZUPT"):
-    // el teléfono no se mueve, así que los saltos del GPS son ruido. La
-    // posición queda fija y solo se promedia muy lentamente para afinarla.
-    // Si el GNSS reporta velocidad real (p. ej. vehículo a ritmo constante)
-    // o el salto es enorme, se procesa normalmente.
-    final reposo = sensorEnReposo &&
+    // Teléfono quieto (acelerómetro) y GPS sin velocidad: la nueva lectura
+    // es ruido; se mantiene el último punto real. Un salto grande (o una
+    // velocidad real, p. ej. vehículo) sí se acepta.
+    if (sensorEnReposo &&
         velocidadValida < 1.0 &&
-        distancia < math.max(50.0, precisionValida * 3);
-    if (reposo) {
+        distancia < math.max(25.0, precisionValida * 2)) {
       _tiempoMs = tiempoMs;
-      _varianza += dtMs * 0.05 * 0.05 / 1000;
-      final r = math.pow(precisionValida * 4, 2).toDouble();
-      final k = _varianza / (_varianza + r);
-      _lat = _lat! + k * (latitud - _lat!);
-      _lng = _lng! + k * (longitud - _lng!);
-      _varianza = (1 - k) * _varianza;
-      _veniaDeReposo = true;
-      return _resultado(0, null, false);
-    }
-    if (_veniaDeReposo) {
-      // Se vuelve a mover: se "suelta" el filtro para no arrastrar retraso.
-      _veniaDeReposo = false;
-      _varianza = math.max(_varianza, precisionValida * precisionValida);
+      return LecturaFiltrada(
+        punto: ultimo,
+        precision: _precisionUltimo,
+        velocidad: 0,
+        rumbo: _ultimoRumbo,
+        enMovimiento: false,
+        esNuevo: false,
+      );
     }
 
-    // Predicción: la incertidumbre crece con el tiempo y con la velocidad.
-    // La velocidad Doppler del GNSS es muy fiable en reposo: si es ~0 el
-    // filtro se vuelve "rígido" y el marcador deja de temblar.
-    // Si la lectura se aleja mucho de la estimación, el teléfono se está
-    // moviendo aunque no reporte velocidad (proveedor sin Doppler).
-    final quieto = velocidadValida < 0.3 &&
-        distancia < math.max(5.0, precisionValida);
-    final q = quieto
-        ? 1.5
-        : math.max(ruidoProcesoMinimo, velocidadValida * 2);
-    _varianza += dtMs * q * q / 1000;
-    _tiempoMs = tiempoMs;
-
-    // Corrección.
-    final r = precisionValida * precisionValida;
-    final k = _varianza / (_varianza + r);
-    final latAnterior = _lat!;
-    final lngAnterior = _lng!;
-    _lat = latAnterior + k * (latitud - latAnterior);
-    _lng = lngAnterior + k * (longitud - lngAnterior);
-    _varianza = (1 - k) * _varianza;
-
-    final desplazamiento = _distanciaMetros(latAnterior, lngAnterior, _lat!, _lng!);
-    // En movimiento si el GNSS reporta velocidad, o si (sin velocidad
-    // disponible) el desplazamiento supera claramente el ruido.
-    final sinVelocidad = velocidadValida < 0.3;
-    final enMovimiento = velocidadValida > 0.7 ||
-        (sinVelocidad && desplazamiento > math.max(4.0, precisionValida * 0.7)) ||
-        (!sinVelocidad && desplazamiento > math.max(2.0, precisionValida * 0.5));
-    double? rumboCalculado;
-    if (velocidadValida > 1.0 && rumbo.isFinite && rumbo >= 0) {
-      rumboCalculado = rumbo;
-    } else if (enMovimiento && desplazamiento > 1.0) {
-      rumboCalculado = _rumbo(latAnterior, lngAnterior, _lat!, _lng!);
-    }
-    return _resultado(velocidadValida, rumboCalculado, enMovimiento);
-  }
-
-  LecturaFiltrada _resultado(double velocidad, double? rumbo, bool enMovimiento) {
-    if (rumbo != null && rumbo.isFinite && rumbo >= 0) _ultimoRumbo = rumbo;
-    return LecturaFiltrada(
-      punto: LatLng(_lat!, _lng!),
-      precision: math.sqrt(_varianza),
-      velocidad: velocidad,
-      rumbo: _ultimoRumbo,
-      enMovimiento: enMovimiento,
+    final rumboCalculado = velocidadValida > 1.0 && rumbo.isFinite && rumbo >= 0
+        ? rumbo
+        : (distancia >= 1.0 ? _rumbo(ultimo, punto) : null);
+    return _aceptar(
+      punto,
+      precisionValida,
+      velocidadValida,
+      rumboCalculado,
+      tiempoMs,
+      velocidadValida > 0.5 || distancia >= 1.0,
     );
   }
 
-  static double _distanciaMetros(double lat1, double lng1, double lat2, double lng2) {
-    final dLat = (lat2 - lat1) * _metrosPorGradoLat;
-    final dLng = (lng2 - lng1) *
+  LecturaFiltrada _aceptar(
+    LatLng punto,
+    double precision,
+    double velocidad,
+    double? rumbo,
+    int tiempoMs,
+    bool enMovimiento,
+  ) {
+    _ultimo = punto;
+    _precisionUltimo = precision;
+    _tiempoMs = tiempoMs;
+    if (rumbo != null && rumbo.isFinite && rumbo >= 0) _ultimoRumbo = rumbo;
+    return LecturaFiltrada(
+      punto: punto,
+      precision: precision,
+      velocidad: velocidad,
+      rumbo: _ultimoRumbo,
+      enMovimiento: enMovimiento,
+      esNuevo: true,
+    );
+  }
+
+  static double _distanciaMetros(LatLng a, LatLng b) {
+    final dLat = (b.latitude - a.latitude) * _metrosPorGradoLat;
+    final dLng = (b.longitude - a.longitude) *
         _metrosPorGradoLat *
-        math.cos((lat1 + lat2) / 2 * math.pi / 180);
+        math.cos((a.latitude + b.latitude) / 2 * math.pi / 180);
     return math.sqrt(dLat * dLat + dLng * dLng);
   }
 
-  static double _rumbo(double lat1, double lng1, double lat2, double lng2) {
-    final dLat = lat2 - lat1;
-    final dLng = (lng2 - lng1) * math.cos((lat1 + lat2) / 2 * math.pi / 180);
-    final grados = math.atan2(dLng, dLat) * 180 / math.pi;
-    return (grados + 360) % 360;
+  static double _rumbo(LatLng a, LatLng b) {
+    final dLat = b.latitude - a.latitude;
+    final dLng = (b.longitude - a.longitude) *
+        math.cos((a.latitude + b.latitude) / 2 * math.pi / 180);
+    return (math.atan2(dLng, dLat) * 180 / math.pi + 360) % 360;
   }
 }

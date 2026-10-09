@@ -8,37 +8,43 @@
   <style>
     :root { color-scheme: light; --ink:#152522; --muted:#6a7975; --line:#d9e3df; --accent:#087f72; --paper:#fff; --wash:#eef4f0; --ok:#159b65; --warn:#c77700; --bad:#b42318; }
     * { box-sizing:border-box; }
-    body { margin:0; color:var(--ink); background:var(--wash); font:15px ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif; }
+    body { margin:0; color:var(--ink); background:var(--wash); font:14px ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif; }
     button,input { font:inherit; }
-    button { cursor:pointer; border:0; border-radius:8px; padding:9px 13px; color:#fff; background:var(--accent); font-weight:700; }
+    button { cursor:pointer; border:0; border-radius:8px; padding:8px 12px; color:#fff; background:var(--accent); font-weight:700; }
     button.secondary { background:#e1ebe7; color:var(--ink); }
-    input { width:100%; border:1px solid var(--line); padding:9px 12px; border-radius:8px; background:#fff; }
-    .shell { height:100vh; display:grid; grid-template-columns:340px 1fr; grid-template-rows:62px 1fr; }
-    header { grid-column:1/-1; display:flex; align-items:center; justify-content:space-between; gap:12px; padding:0 22px; background:var(--paper); border-bottom:1px solid var(--line); }
-    header strong { font-size:19px; }
+    button.danger { background:#fbe4e2; color:var(--bad); }
+    button.icon { padding:6px 9px; font-weight:600; font-size:13px; }
+    input[type=search] { width:100%; border:1px solid var(--line); padding:8px 11px; border-radius:8px; background:#fff; }
+    .shell { height:100vh; display:grid; grid-template-columns:370px 1fr; grid-template-rows:58px 1fr; }
+    header { grid-column:1/-1; display:flex; align-items:center; justify-content:space-between; gap:12px; padding:0 20px; background:var(--paper); border-bottom:1px solid var(--line); }
+    header strong { font-size:18px; }
     .status { color:var(--muted); font-size:13px; display:flex; align-items:center; gap:6px; }
-    aside { overflow:auto; background:var(--paper); border-right:1px solid var(--line); padding:16px; }
-    .tools { display:flex; gap:8px; margin:12px 0; }
-    .device { width:100%; text-align:left; color:var(--ink); background:transparent; border-bottom:1px solid var(--line); border-radius:0; padding:13px 8px; font-weight:600; }
-    .device:hover,.device.active { background:#edf7f3; }
-    .device-top { display:flex; justify-content:space-between; gap:8px; }
-    .device small { display:block; color:var(--muted); margin-top:4px; font-weight:400; }
+    aside { overflow:auto; background:var(--paper); border-right:1px solid var(--line); padding:14px; display:flex; flex-direction:column; gap:10px; }
+    .tools { display:flex; gap:6px; flex-wrap:wrap; }
+    .tools input { flex:1 1 140px; }
+    .device { border:1px solid var(--line); border-left:6px solid var(--c); border-radius:10px; padding:10px 10px 8px; cursor:pointer; }
+    .device.active { background:#f1f8f5; box-shadow:0 0 0 2px var(--c) inset; }
+    .device.hidden-route { opacity:.55; }
+    .device-top { display:flex; justify-content:space-between; gap:8px; font-weight:700; }
+    .device small { display:block; color:var(--muted); margin-top:3px; }
+    .device .actions { display:flex; gap:5px; margin-top:8px; flex-wrap:wrap; }
     .dot { display:inline-block; width:9px; height:9px; border-radius:50%; background:#aab8b3; margin-right:6px; }
     .dot.online { background:var(--ok); box-shadow:0 0 0 3px #159b6530; }
     .count { color:var(--muted); font-size:13px; }
     main { position:relative; }
     #map { height:100%; width:100%; }
-    .details { position:absolute; z-index:1000; right:16px; bottom:16px; width:min(340px,calc(100% - 32px)); padding:16px; border-radius:12px; background:#fffffff2; box-shadow:0 10px 30px #173b3224; }
-    .details h2 { font-size:17px; margin:0 0 10px; }
-    .metric { display:flex; justify-content:space-between; gap:10px; padding:6px 0; border-bottom:1px solid var(--line); font-variant-numeric:tabular-nums; }
+    .details { position:absolute; z-index:1000; right:14px; bottom:14px; width:min(330px,calc(100% - 28px)); padding:14px; border-radius:12px; background:#fffffff2; box-shadow:0 10px 30px #173b3224; }
+    .details h2 { font-size:16px; margin:0 0 8px; display:flex; align-items:center; gap:8px; }
+    .swatch { width:14px; height:14px; border-radius:4px; background:var(--c); display:inline-block; }
+    .metric { display:flex; justify-content:space-between; gap:10px; padding:5px 0; border-bottom:1px solid var(--line); font-variant-numeric:tabular-nums; }
     .metric span { color:var(--muted); }
-    .follow { position:absolute; z-index:1000; left:16px; bottom:16px; }
+    .map-tools { position:absolute; z-index:1000; left:14px; bottom:14px; display:flex; gap:6px; flex-wrap:wrap; }
     .lat-ok { color:var(--ok); } .lat-warn { color:var(--warn); } .lat-bad { color:var(--bad); }
-    .arrow { width:30px; height:30px; transition:none; }
-    .arrow svg { width:30px; height:30px; display:block; filter:drop-shadow(0 1px 2px #0005); }
+    .arrow svg { width:28px; height:28px; display:block; filter:drop-shadow(0 1px 2px #0006); }
+    .toast { position:fixed; z-index:2000; left:50%; top:70px; transform:translateX(-50%); background:#152522; color:#fff; padding:10px 16px; border-radius:10px; font-weight:600; }
     @media (max-width:800px) {
-      .shell { grid-template-columns:1fr; grid-template-rows:62px auto 60vh; height:auto; min-height:100vh; }
-      aside { max-height:300px; border-right:0; border-bottom:1px solid var(--line); }
+      .shell { grid-template-columns:1fr; grid-template-rows:58px auto 60vh; height:auto; min-height:100vh; }
+      aside { max-height:340px; border-right:0; border-bottom:1px solid var(--line); }
       main { min-height:60vh; } header { padding:0 14px; }
     }
   </style>
@@ -51,13 +57,22 @@
     </header>
     <aside>
       <div class="count" id="count">0 dispositivos</div>
-      <div class="tools"><input id="search" placeholder="Buscar dispositivo"><button id="filter" class="secondary" title="Filtrar estado">Todos</button></div>
+      <div class="tools">
+        <input id="search" type="search" placeholder="Buscar dispositivo">
+        <button id="filter" class="secondary" title="Mostrar solo los conectados">Todos</button>
+      </div>
+      <div class="tools">
+        <button id="showAll" class="secondary icon">Mostrar todas las rutas</button>
+        <button id="fitAll" class="secondary icon">Encuadrar todo</button>
+      </div>
       <div id="devices"></div>
       <p class="count" id="metrics"></p>
     </aside>
     <main>
       <div id="map"></div>
-      <button id="follow" class="follow" title="Seguir al dispositivo seleccionado">Siguiendo</button>
+      <div class="map-tools">
+        <button id="follow" title="Seguir al dispositivo seleccionado">Siguiendo</button>
+      </div>
       <section id="details" class="details"><h2>Selecciona un dispositivo</h2><p class="count">Los celulares conectados aparecerán aquí.</p></section>
     </main>
   </section>
@@ -66,129 +81,191 @@
     const CARTO_KEY = 'cb1_4f7e_1_cec811c28cf2ef52dd7565da';
     // Rutas relativas: el panel funciona tanto en "/" como detrás de Nginx en "/movimiento/".
     const BASE = location.pathname.replace(/[^/]*$/, '');
+    const PALETTE = ['#e6194b', '#3cb44b', '#4363d8', '#f58231', '#911eb4', '#0aa8a8', '#f032e6', '#9a6324', '#800000', '#000075', '#808000', '#d4a017'];
     const $ = (id) => document.getElementById(id);
     const state = {
       devices: new Map(), selected: null, onlineOnly: false, follow: true,
-      tracks: new Map(), // deviceId -> { marker, accuracy, route, anim, last, prevTime, hz }
+      tracks: new Map(), // deviceId -> { marker, accuracy, line, points, last, prevTime, hz, heading, visible }
       clockOffset: 0, rtt: null,
     };
 
-    async function api(path) {
-      const response = await fetch(BASE + path, { cache: 'no-store' });
+    async function api(path, options) {
+      const response = await fetch(BASE + path, { cache: 'no-store', ...options });
       if (!response.ok) throw new Error((await response.json().catch(() => ({}))).error || ('HTTP ' + response.status));
       return response.json();
     }
 
-    const map = L.map('map', { zoomControl: true }).setView([-13.53195, -71.96746], 14);
+    // Color estable por dispositivo (mismo celular = mismo color siempre).
+    function colorFor(deviceId) {
+      let hash = 0;
+      for (const ch of deviceId) hash = (hash * 31 + ch.charCodeAt(0)) >>> 0;
+      return PALETTE[hash % PALETTE.length];
+    }
+
+    function toast(text) {
+      const el = document.createElement('div');
+      el.className = 'toast';
+      el.textContent = text;
+      document.body.appendChild(el);
+      setTimeout(() => el.remove(), 2500);
+    }
+
+    const map = L.map('map', { zoomControl: true, preferCanvas: true }).setView([-13.53195, -71.96746], 14);
     L.tileLayer(`https://basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png?key=${CARTO_KEY}`, {
       maxZoom: 20, maxNativeZoom: 18, // CARTO no publica z19+ (403)
       attribution: '&copy; OpenStreetMap contributors &copy; CARTO',
     }).addTo(map);
-    // Si el usuario arrastra el mapa se desactiva el seguimiento automático.
     map.on('dragstart', () => setFollow(false));
 
     function setFollow(value) {
       state.follow = value;
       $('follow').textContent = value ? 'Siguiendo' : 'Seguir';
       $('follow').classList.toggle('secondary', !value);
-      if (value) centerSelected();
+      if (value) centerOn(state.selected);
     }
     $('follow').onclick = () => setFollow(!state.follow);
 
-    function arrowIcon(online) {
-      const color = online ? '#087f72' : '#7b8a86';
+    function arrowIcon(color, online) {
       return L.divIcon({
-        className: 'arrow', iconSize: [30, 30], iconAnchor: [15, 15],
-        html: `<svg viewBox="0 0 30 30"><circle cx="15" cy="15" r="13" fill="${color}" stroke="#fff" stroke-width="3"/><path d="M15 6 L21 21 L15 17.5 L9 21 Z" fill="#fff"/></svg>`,
+        className: 'arrow', iconSize: [28, 28], iconAnchor: [14, 14],
+        html: `<svg viewBox="0 0 28 28"><circle cx="14" cy="14" r="12" fill="${online ? color : '#8a9894'}" stroke="#fff" stroke-width="3"/><path d="M14 5.5 L19.5 19.5 L14 16.3 L8.5 19.5 Z" fill="#fff"/></svg>`,
       });
     }
 
     function getTrack(deviceId) {
       let track = state.tracks.get(deviceId);
       if (!track) {
-        track = { marker: null, accuracy: null, route: null, anim: null, last: null, prevTime: null, hz: 0, heading: 0 };
+        const color = colorFor(deviceId);
+        track = {
+          color, marker: null, accuracy: null, last: null, prevTime: null, hz: 0, heading: 0, visible: true,
+          line: L.polyline([], { color, weight: 4, opacity: 0.9 }).addTo(map),
+          points: L.layerGroup().addTo(map),
+        };
         state.tracks.set(deviceId, track);
       }
       return track;
     }
 
-    function setHeading(track, heading) {
-      if (heading == null || !Number.isFinite(heading)) return;
-      track.heading = heading;
+    function setHeading(track) {
       const svg = track.marker?.getElement()?.querySelector('svg');
-      if (svg) svg.style.transform = `rotate(${heading}deg)`;
+      if (svg) svg.style.transform = `rotate(${track.heading}deg)`;
     }
 
-    // Aplica una muestra al mapa. animate=false para el estado inicial.
-    function applyLocation(loc, animate) {
-      const device = state.devices.get(loc.deviceId);
-      const track = getTrack(loc.deviceId);
+    // Punto de la ruta: un vértice por cada lectura real del GPS.
+    function addRoutePoint(track, loc) {
+      const point = [loc.latitude, loc.longitude];
+      track.line.addLatLng(point);
+      L.circleMarker(point, { radius: 3, color: track.color, weight: 2, fillColor: '#fff', fillOpacity: 1 })
+        .bindTooltip(`${new Date(loc.timestamp).toLocaleTimeString()} · ±${(loc.accuracy ?? 0).toFixed(0)} m`)
+        .addTo(track.points);
+    }
+
+    function clearRoute(track) {
+      track.line.setLatLngs([]);
+      track.points.clearLayers();
+    }
+
+    // Coloca el marcador exactamente en la posición recibida (sin animación).
+    function placeMarker(deviceId, loc) {
+      const device = state.devices.get(deviceId);
+      const track = getTrack(deviceId);
       const point = L.latLng(loc.latitude, loc.longitude);
-      const time = Date.parse(loc.timestamp);
-      if (track.last && time < Date.parse(track.last.timestamp)) {
-        // Muestra antigua (cola offline): solo completa la ruta.
-        return;
+      if (!track.marker) {
+        track.marker = L.marker(point, { icon: arrowIcon(track.color, device?.online ?? true), zIndexOffset: 1000 })
+          .bindTooltip(escapeHtml(device?.name || deviceId));
+        track.marker.on('click', () => selectDevice(deviceId));
+        track.accuracy = L.circle(point, { radius: loc.accuracy || 0, color: track.color, weight: 1, fillOpacity: 0.08, interactive: false });
+        if (track.visible) { track.marker.addTo(map); track.accuracy.addTo(map); }
+      } else {
+        track.marker.setLatLng(point);
+        track.accuracy.setLatLng(point);
       }
-      const interval = track.prevTime ? time - track.prevTime : 500;
-      if (track.prevTime && interval > 0) {
-        const hz = 1000 / interval;
-        track.hz = track.hz ? track.hz * 0.8 + hz * 0.2 : hz;
+      track.accuracy.setRadius(loc.accuracy || 0);
+      if (loc.heading != null && Number.isFinite(loc.heading)) track.heading = loc.heading;
+      setHeading(track);
+    }
+
+    function applyLive(loc) {
+      const track = getTrack(loc.deviceId);
+      const time = Date.parse(loc.timestamp);
+      if (track.last && time < Date.parse(track.last.timestamp)) return;
+      if (track.prevTime && time > track.prevTime) {
+        const hz = 1000 / (time - track.prevTime);
+        track.hz = track.hz ? track.hz * 0.7 + hz * 0.3 : hz;
       }
       track.prevTime = time;
       track.last = loc;
+      addRoutePoint(track, loc);
+      placeMarker(loc.deviceId, loc);
+      if (state.follow && state.selected === loc.deviceId) map.panTo([loc.latitude, loc.longitude], { animate: false });
+      if (state.selected === loc.deviceId) scheduleDetails();
+    }
 
-      if (!track.marker) {
-        track.marker = L.marker(point, { icon: arrowIcon(device?.online ?? true), zIndexOffset: 1000 })
-          .addTo(map).bindTooltip(escapeHtml(device?.name || loc.deviceId));
-        track.marker.on('click', () => selectDevice(loc.deviceId));
-        track.accuracy = L.circle(point, { radius: loc.accuracy || 0, color: '#087f72', weight: 1, fillOpacity: 0.08, interactive: false }).addTo(map);
-      } else if (animate) {
-        // Interpolación suave hasta la nueva posición (dura como máximo el intervalo entre muestras).
-        const from = track.marker.getLatLng();
-        const duration = Math.min(800, Math.max(120, interval * 0.9));
-        track.anim = { from, to: point, start: performance.now(), duration };
-      } else {
-        track.marker.setLatLng(point);
-      }
-      track.accuracy.setRadius(loc.accuracy || 0);
-      if (!animate) track.accuracy.setLatLng(point);
-
-      const heading = loc.speed > 0.8 && loc.heading != null ? loc.heading : null;
-      setHeading(track, heading ?? track.heading);
-
-      if (state.selected === loc.deviceId) {
-        if (!track.route) track.route = L.polyline([], { color: '#087f72', weight: 5, opacity: 0.85 }).addTo(map);
-        track.route.addLatLng(point);
-        scheduleDetails();
+    async function loadRoute(deviceId) {
+      const track = getTrack(deviceId);
+      const history = await api(`api/devices/${encodeURIComponent(deviceId)}/history?lastSession=true`);
+      clearRoute(track);
+      for (const loc of history.locations) addRoutePoint(track, loc);
+      const latest = history.locations.at(-1);
+      if (latest) {
+        track.last = latest;
+        track.prevTime = Date.parse(latest.timestamp);
+        placeMarker(deviceId, latest);
       }
     }
 
-    function animationLoop(now) {
-      for (const [deviceId, track] of state.tracks) {
-        if (!track.anim) continue;
-        const progress = Math.min(1, (now - track.anim.start) / track.anim.duration);
-        const lat = track.anim.from.lat + (track.anim.to.lat - track.anim.from.lat) * progress;
-        const lng = track.anim.from.lng + (track.anim.to.lng - track.anim.from.lng) * progress;
-        const point = L.latLng(lat, lng);
-        track.marker.setLatLng(point);
-        track.accuracy.setLatLng(point);
-        if (progress >= 1) track.anim = null;
-        if (state.follow && state.selected === deviceId) map.panTo(point, { animate: false });
-      }
-      requestAnimationFrame(animationLoop);
+    // Recarga diferida (para lotes de la cola offline del celular).
+    const reloadTimers = new Map();
+    function scheduleRouteReload(deviceId) {
+      clearTimeout(reloadTimers.get(deviceId));
+      reloadTimers.set(deviceId, setTimeout(() => loadRoute(deviceId).catch(() => {}), 1500));
     }
-    requestAnimationFrame(animationLoop);
 
-    function centerSelected() {
-      const track = state.tracks.get(state.selected);
+    function setVisible(deviceId, visible) {
+      const track = getTrack(deviceId);
+      track.visible = visible;
+      for (const layer of [track.line, track.points, track.marker, track.accuracy]) {
+        if (!layer) continue;
+        if (visible) layer.addTo(map); else layer.remove();
+      }
+      if (visible) setHeading(track);
+      renderDevices();
+    }
+
+    function removeTrack(deviceId) {
+      const track = state.tracks.get(deviceId);
+      if (!track) return;
+      for (const layer of [track.line, track.points, track.marker, track.accuracy]) layer?.remove();
+      state.tracks.delete(deviceId);
+    }
+
+    function centerOn(deviceId) {
+      const track = state.tracks.get(deviceId);
       if (track?.marker) map.setView(track.marker.getLatLng(), Math.max(map.getZoom(), 17), { animate: false });
+    }
+
+    function fitAll() {
+      const bounds = L.latLngBounds([]);
+      for (const track of state.tracks.values()) {
+        if (!track.visible) continue;
+        for (const p of track.line.getLatLngs()) bounds.extend(p);
+        if (track.marker) bounds.extend(track.marker.getLatLng());
+      }
+      if (bounds.isValid()) { setFollow(false); map.fitBounds(bounds.pad(0.15)); }
     }
 
     async function loadDevices() {
       const result = await api('api/devices');
-      for (const device of result.devices) state.devices.set(device.deviceId, device);
-      scheduleRender();
-      if (!state.selected) {
+      const ids = new Set(result.devices.map((d) => d.deviceId));
+      for (const id of [...state.devices.keys()]) if (!ids.has(id)) { state.devices.delete(id); removeTrack(id); }
+      const nuevos = [];
+      for (const device of result.devices) {
+        if (!state.devices.has(device.deviceId)) nuevos.push(device.deviceId);
+        state.devices.set(device.deviceId, device);
+      }
+      await Promise.all(nuevos.map((id) => loadRoute(id).catch(() => {})));
+      renderDevices();
+      if (!state.selected || !state.devices.has(state.selected)) {
         const first = result.devices.find((d) => d.online) || result.devices[0];
         if (first) selectDevice(first.deviceId);
       }
@@ -198,45 +275,62 @@
     function scheduleRender() {
       if (renderQueued) return;
       renderQueued = true;
-      setTimeout(() => { renderQueued = false; renderDevices(); }, 250);
+      setTimeout(() => { renderQueued = false; renderDevices(); }, 300);
     }
 
     function renderDevices() {
       const query = $('search').value.toLowerCase();
       const all = [...state.devices.values()].sort((a, b) => (b.online - a.online) || a.name.localeCompare(b.name));
-      const visible = all.filter((d) => (!state.onlineOnly || d.online) && `${d.name} ${d.model || ''}`.toLowerCase().includes(query));
+      const visible = all.filter((d) => (!state.onlineOnly || d.online) && `${d.name} ${d.model || ''} ${d.deviceId}`.toLowerCase().includes(query));
       $('count').textContent = `${all.filter((d) => d.online).length}/${all.length} conectados`;
-      $('devices').innerHTML = visible.map((d) => `
-        <button class="device ${state.selected === d.deviceId ? 'active' : ''}" data-id="${escapeHtml(d.deviceId)}">
+      $('devices').innerHTML = visible.map((d) => {
+        const track = state.tracks.get(d.deviceId);
+        const puntos = track ? track.line.getLatLngs().length : 0;
+        const id = escapeHtml(d.deviceId);
+        return `
+        <div class="device ${state.selected === d.deviceId ? 'active' : ''} ${track && !track.visible ? 'hidden-route' : ''}" data-id="${id}" style="--c:${colorFor(d.deviceId)}">
           <div class="device-top"><span><i class="dot ${d.online ? 'online' : ''}"></i>${escapeHtml(d.name)}</span><span>${d.battery ?? '--'}%</span></div>
-          <small>${escapeHtml(d.model || d.platform)} · ${d.online ? 'online' : 'offline'}<br>Última señal: ${d.lastSeen ? new Date(d.lastSeen).toLocaleTimeString() : '--'}</small>
-        </button>`).join('');
-      document.querySelectorAll('.device').forEach((element) => { element.onclick = () => selectDevice(element.dataset.id); });
+          <small>${escapeHtml(d.model || d.platform)} · ${d.online ? 'online' : 'offline'} · ${puntos} puntos<br>Última señal: ${d.lastSeen ? new Date(d.lastSeen).toLocaleTimeString() : '--'}</small>
+          <div class="actions">
+            <button class="secondary icon" data-act="center" data-id="${id}">Centrar</button>
+            <button class="secondary icon" data-act="toggle" data-id="${id}">${track && !track.visible ? 'Mostrar' : 'Ocultar'}</button>
+            <button class="danger icon" data-act="clear" data-id="${id}">Borrar ruta</button>
+            <button class="danger icon" data-act="delete" data-id="${id}">Eliminar</button>
+          </div>
+        </div>`;
+      }).join('');
     }
 
-    async function selectDevice(deviceId) {
-      if (state.selected && state.selected !== deviceId) {
-        const previous = state.tracks.get(state.selected);
-        previous?.route?.remove();
-        if (previous) previous.route = null;
+    $('devices').addEventListener('click', async (event) => {
+      const button = event.target.closest('button[data-act]');
+      const card = event.target.closest('.device');
+      if (!button) { if (card) selectDevice(card.dataset.id); return; }
+      event.stopPropagation();
+      const id = button.dataset.id;
+      const name = state.devices.get(id)?.name || id;
+      try {
+        if (button.dataset.act === 'center') { selectDevice(id); setFollow(true); }
+        if (button.dataset.act === 'toggle') setVisible(id, !getTrack(id).visible);
+        if (button.dataset.act === 'clear') {
+          if (!confirm(`¿Borrar toda la ruta de "${name}"? No se puede deshacer.`)) return;
+          await api(`api/devices/${encodeURIComponent(id)}/locations`, { method: 'DELETE' });
+          toast('Ruta borrada');
+        }
+        if (button.dataset.act === 'delete') {
+          if (!confirm(`¿Eliminar "${name}" y toda su ruta? Si el celular sigue enviando datos volverá a aparecer.`)) return;
+          await api(`api/devices/${encodeURIComponent(id)}`, { method: 'DELETE' });
+          toast('Dispositivo eliminado');
+        }
+      } catch (error) {
+        toast('Error: ' + error.message);
       }
+    });
+
+    function selectDevice(deviceId) {
       state.selected = deviceId;
       renderDevices();
-      try {
-        const history = await api(`api/devices/${encodeURIComponent(deviceId)}/history?activeOnly=true`);
-        const latest = history.locations.at(-1) || (await api(`api/devices/${encodeURIComponent(deviceId)}/location`)).lastKnown;
-        const track = getTrack(deviceId);
-        track.route?.remove();
-        track.route = L.polyline(history.locations.map((p) => [p.latitude, p.longitude]), { color: '#087f72', weight: 5, opacity: 0.85 }).addTo(map);
-        if (latest) {
-          track.last = null;
-          applyLocation(latest, false);
-          setFollow(true);
-        }
-        renderDetails();
-      } catch (error) {
-        $('details').innerHTML = `<h2>Error</h2><p>${escapeHtml(error.message)}</p>`;
-      }
+      renderDetails();
+      if (state.follow) centerOn(deviceId);
     }
 
     let detailsQueued = false;
@@ -253,24 +347,28 @@
 
     function renderDetails() {
       const device = state.devices.get(state.selected);
-      if (!device) return;
+      if (!device) {
+        $('details').innerHTML = '<h2>Selecciona un dispositivo</h2><p class="count">Los celulares conectados aparecerán aquí.</p>';
+        return;
+      }
       const track = state.tracks.get(state.selected);
       const loc = track?.last;
       const age = loc ? Date.now() + state.clockOffset - Date.parse(loc.timestamp) : null;
-      const aviso = device.online && age != null && age > 3000
-        ? `<p class="lat-warn" style="margin:0 0 8px;font-size:13px">Sin datos nuevos hace ${(age / 1000).toFixed(0)} s. El celular debe estar al aire libre (bajo techo el GPS solo da posiciones por WiFi cada varios segundos) y con la app abierta.</p>`
+      const aviso = device.online && age != null && age > 5000
+        ? `<p class="lat-warn" style="margin:0 0 8px;font-size:13px">Sin posiciones nuevas hace ${(age / 1000).toFixed(0)} s: el celular está quieto o sin señal GPS (bajo techo).</p>`
         : '';
       $('details').innerHTML = `
-        <h2>${escapeHtml(device.name)}</h2>${aviso}
-        <div class="metric"><span>Versión app</span><strong>${escapeHtml(device.appVersion || '--')}</strong></div>
+        <h2><span class="swatch" style="--c:${colorFor(device.deviceId)}"></span>${escapeHtml(device.name)}</h2>${aviso}
         <div class="metric"><span>Estado</span><strong>${device.online ? 'Online' : 'Offline'}</strong></div>
         <div class="metric"><span>Modelo</span><strong>${escapeHtml(device.model || device.platform || '--')}</strong></div>
+        <div class="metric"><span>Versión app</span><strong>${escapeHtml(device.appVersion || '--')}</strong></div>
         <div class="metric"><span>Latencia GPS → servidor</span><strong class="${latencyClass(loc?.latencyMs)}">${loc?.latencyMs != null ? `${loc.latencyMs.toFixed(0)} ms` : '--'}</strong></div>
-        <div class="metric"><span>Antigüedad del dato</span><strong class="${latencyClass(age)}">${age != null ? `${(age / 1000).toFixed(1)} s` : '--'}</strong></div>
+        <div class="metric"><span>Última posición hace</span><strong>${age != null ? `${(Math.max(0, age) / 1000).toFixed(1)} s` : '--'}</strong></div>
         <div class="metric"><span>Frecuencia</span><strong>${track?.hz ? `${track.hz.toFixed(1)} Hz` : '--'}</strong></div>
         <div class="metric"><span>Velocidad</span><strong>${loc?.speed != null ? `${(loc.speed * 3.6).toFixed(1)} km/h` : '--'}</strong></div>
         <div class="metric"><span>Precisión</span><strong>${loc?.accuracy != null ? `± ${loc.accuracy.toFixed(1)} m` : '--'}</strong></div>
         <div class="metric"><span>Coordenadas</span><strong>${loc ? `${loc.latitude.toFixed(6)}, ${loc.longitude.toFixed(6)}` : '--'}</strong></div>
+        <div class="metric"><span>Puntos en la ruta</span><strong>${track ? track.line.getLatLngs().length : 0}</strong></div>
         <div class="metric"><span>Batería</span><strong>${device.battery ?? '--'}%</strong></div>`;
     }
     setInterval(renderDetails, 1000);
@@ -284,7 +382,6 @@
         const ping = () => socket.readyState === 1 && socket.send(JSON.stringify({ type: 'ping', t: Date.now() }));
         ping();
         pingTimer = setInterval(ping, 5000);
-        // Al reconectar se recargan dispositivos para no perder cambios.
         loadDevices().catch(() => {});
       };
       socket.onclose = () => {
@@ -294,28 +391,50 @@
       };
       socket.onmessage = (event) => {
         const message = JSON.parse(event.data);
-        if (message.type === 'pong') {
-          const now = Date.now();
-          state.rtt = now - message.t;
-          state.clockOffset = message.serverTime - (message.t + state.rtt / 2);
-          setConn(`Tiempo real · RTT ${state.rtt} ms`, true);
-        } else if (message.type === 'device.updated') {
-          const known = state.devices.get(message.data.deviceId);
-          state.devices.set(message.data.deviceId, { ...known, ...message.data });
-          const track = state.tracks.get(message.data.deviceId);
-          if (track?.marker) { track.marker.setIcon(arrowIcon(message.data.online)); setHeading(track, track.heading); }
-          scheduleRender();
-          if (!state.selected) selectDevice(message.data.deviceId);
-        } else if (message.type === 'location.updated') {
-          const loc = message.data;
-          const device = state.devices.get(loc.deviceId);
-          if (!device) { loadDevices().catch(() => {}); return; }
-          device.lastSeen = loc.receivedAt;
-          if (loc.battery != null) device.battery = loc.battery;
-          device.online = true;
-          if (loc.live === false) return; // Cola offline: no mover el marcador hacia atrás.
-          applyLocation(loc, true);
-          scheduleRender();
+        const data = message.data || {};
+        switch (message.type) {
+          case 'pong': {
+            state.rtt = Date.now() - message.t;
+            state.clockOffset = message.serverTime - (message.t + state.rtt / 2);
+            setConn(`Tiempo real · RTT ${state.rtt} ms`, true);
+            break;
+          }
+          case 'device.updated': {
+            const isNew = !state.devices.has(data.deviceId);
+            state.devices.set(data.deviceId, { ...state.devices.get(data.deviceId), ...data });
+            const track = state.tracks.get(data.deviceId);
+            if (track?.marker) { track.marker.setIcon(arrowIcon(track.color, data.online)); setHeading(track); }
+            if (isNew) loadRoute(data.deviceId).catch(() => {});
+            scheduleRender();
+            if (!state.selected) selectDevice(data.deviceId);
+            break;
+          }
+          case 'device.removed': {
+            state.devices.delete(data.deviceId);
+            removeTrack(data.deviceId);
+            if (state.selected === data.deviceId) state.selected = null;
+            renderDevices();
+            renderDetails();
+            break;
+          }
+          case 'route.cleared': {
+            const track = state.tracks.get(data.deviceId);
+            if (track) { clearRoute(track); track.last = null; track.prevTime = null; track.hz = 0; }
+            renderDevices();
+            renderDetails();
+            break;
+          }
+          case 'location.updated': {
+            const device = state.devices.get(data.deviceId);
+            if (!device) { loadDevices().catch(() => {}); return; }
+            device.lastSeen = data.receivedAt;
+            if (data.battery != null) device.battery = data.battery;
+            device.online = true;
+            if (data.live === false) scheduleRouteReload(data.deviceId);
+            else applyLive(data);
+            scheduleRender();
+            break;
+          }
         }
       };
     }
@@ -340,6 +459,8 @@
       $('filter').textContent = state.onlineOnly ? 'Online' : 'Todos';
       renderDevices();
     };
+    $('showAll').onclick = () => { for (const id of state.devices.keys()) setVisible(id, true); };
+    $('fitAll').onclick = fitAll;
     setTimeout(() => map.invalidateSize(), 50);
     loadDevices().catch((error) => { $('connection').textContent = error.message; }).finally(() => { connectSocket(); loadMetrics(); });
   </script>
