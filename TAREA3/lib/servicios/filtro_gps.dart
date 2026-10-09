@@ -132,31 +132,30 @@ class FiltroGps {
     if (!enVehiculo && distancia < 150) {
       final pasos = pasosDesdeUltimoPunto;
 
-      // Corrección del punto: llega una lectura mucho más precisa que la
-      // actual y compatible con su error (p. ej. el primer punto era ±18 m y
-      // ahora hay ±6 m). No es movimiento: se corrige dónde estás.
-      if ((pasos ?? 0) <= 2 &&
-          precisionValida <= _precisionUltimo * 0.6 &&
-          distancia <= _precisionUltimo + precisionValida) {
-        return _aceptar(punto, precisionValida, 0, _ultimoRumbo, tiempoMs,
-            false, esCorreccion: true);
-      }
-
       // 1) Evidencia de movimiento: pasos detectados (o, sin acelerómetro,
       //    velocidad GNSS de caminata). Agarrar el teléfono no son pasos.
       final hayEvidencia = pasos != null ? pasos > 0 : velocidadValida >= 0.7;
-      if (!hayEvidencia) return _mantener();
 
-      // 2) El desplazamiento debe superar el error del GPS: un paso (~0.8 m)
-      //    es mucho menor que el ruido (±5-15 m) y no se puede medir. Se
-      //    espera hasta que la distancia recorrida sea real y medible.
-      if (distancia < math.max(3.0, precisionValida * 0.8)) return _mantener();
+      if (!hayEvidencia) {
+        // Quieto: el punto mostrado es la lectura MÁS PRECISA recibida. Si
+        // llega una mejor que cae dentro del margen de error de la actual,
+        // se corrige la posición sin trazar tramo. Así un primer punto malo
+        // (±17 m bajo techo) converge a la posición real, pero nunca salta
+        // fuera de su margen de error.
+        if (precisionValida < _precisionUltimo * 0.9 &&
+            distancia <= _precisionUltimo) {
+          return _aceptar(punto, precisionValida, 0, _ultimoRumbo, tiempoMs,
+              false, esCorreccion: true);
+        }
+        return _mantener();
+      }
 
-      // 3) Y debe ser coherente con lo que se caminó: con 2 pasos no se
-      //    puede haber avanzado 12 m (eso es un salto del GPS).
+      // 2) Caminando: cada lectura se muestra al instante (< 1 s), salvo
+      //    saltos incoherentes con lo caminado (con 2 pasos no se avanzan
+      //    12 m: eso es un salto del GPS).
       final maximo = pasos != null
-          ? pasos * longitudPaso * 1.5 + 1.0
-          : velocidadPeatonMaxima * (dtMs / 1000) + 1.0;
+          ? pasos * longitudPaso * 1.5 + 2.0
+          : velocidadPeatonMaxima * (dtMs / 1000) + 2.0;
       if (distancia > maximo) return _mantener();
     }
 

@@ -62,7 +62,7 @@ void main() {
       filtro.procesar(latitud: lat, longitud: lng, precision: 18.5, velocidad: 0, rumbo: 0, tiempoMs: 0);
       // +5.4 m con ±6.8 m: lectura mucho más precisa → corrige el punto.
       final p2 = lat + 5.4 / 111320;
-      final r2 = filtro.procesar(latitud: p2, longitud: lng, precision: 6.8, velocidad: 0.4, rumbo: 0, tiempoMs: 15000, pasosDesdeUltimoPunto: 2)!;
+      final r2 = filtro.procesar(latitud: p2, longitud: lng, precision: 6.8, velocidad: 0.4, rumbo: 0, tiempoMs: 15000, pasosDesdeUltimoPunto: 0)!;
       expect(r2.esCorreccion, isTrue);
       expect(r2.enMovimiento, isFalse);
       // +12.4 m y +6.6 m más con solo 2 pasos: saltos del GPS → se ignoran.
@@ -121,11 +121,25 @@ void main() {
       expect(salto.esNuevo, isFalse);
     });
 
-    test('2 pasos (~1.5 m) no se dibujan: es menos que el error del GPS', () {
+    test('caminando, cada lectura se muestra al instante (< 1 s)', () {
       final filtro = FiltroGps();
       filtro.procesar(latitud: -13.5, longitud: -71.9, precision: 5, velocidad: 0, rumbo: 0, tiempoMs: 0);
-      final r = filtro.procesar(latitud: -13.5 + 1.5 / 111320, longitud: -71.9, precision: 5, velocidad: 0, rumbo: 0, tiempoMs: 2000, pasosDesdeUltimoPunto: 2)!;
-      expect(r.esNuevo, isFalse);
+      final r = filtro.procesar(latitud: -13.5 + 1.5 / 111320, longitud: -71.9, precision: 5, velocidad: 0, rumbo: 0, tiempoMs: 1000, pasosDesdeUltimoPunto: 2)!;
+      expect(r.esNuevo, isTrue);
+      expect(r.punto.latitude, -13.5 + 1.5 / 111320);
+    });
+
+    test('quieto: el punto converge a la lectura más precisa sin saltar', () {
+      final filtro = FiltroGps();
+      // Primer punto malo: ±17 m.
+      filtro.procesar(latitud: -13.5, longitud: -71.9, precision: 17, velocidad: 0, rumbo: 0, tiempoMs: 0);
+      // Lectura mejor (±12 m) a 9 m: dentro del margen → corrige.
+      final a = filtro.procesar(latitud: -13.5 + 9 / 111320, longitud: -71.9, precision: 12, velocidad: 0, rumbo: 0, tiempoMs: 1000, pasosDesdeUltimoPunto: 0)!;
+      expect(a.esCorreccion, isTrue);
+      // Lectura mejor (±8 m) pero a 20 m: fuera del margen → se ignora.
+      final b = filtro.procesar(latitud: -13.5 + 29 / 111320, longitud: -71.9, precision: 8, velocidad: 0, rumbo: 0, tiempoMs: 2000, pasosDesdeUltimoPunto: 0)!;
+      expect(b.esNuevo, isFalse);
+      expect(b.punto.latitude, -13.5 + 9 / 111320);
     });
 
     test('al volver a caminar sigue el punto real', () {
