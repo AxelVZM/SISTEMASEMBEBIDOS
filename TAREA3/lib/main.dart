@@ -19,7 +19,7 @@ import 'servicios/base_datos_local.dart';
 import 'servicios/filtro_gps.dart';
 import 'servicios/seguimiento_remoto.dart';
 
-const _versionApp = '1.1.0';
+const _versionApp = '1.2.0';
 const _canalPantalla = MethodChannel('movimiento/pantalla');
 
 /// Mantiene la pantalla encendida mientras se registra (solo Android).

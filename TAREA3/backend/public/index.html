@@ -257,8 +257,12 @@
       const track = state.tracks.get(state.selected);
       const loc = track?.last;
       const age = loc ? Date.now() + state.clockOffset - Date.parse(loc.timestamp) : null;
+      const aviso = device.online && age != null && age > 3000
+        ? `<p class="lat-warn" style="margin:0 0 8px;font-size:13px">Sin datos nuevos hace ${(age / 1000).toFixed(0)} s. El celular debe estar al aire libre (bajo techo el GPS solo da posiciones por WiFi cada varios segundos) y con la app abierta.</p>`
+        : '';
       $('details').innerHTML = `
-        <h2>${escapeHtml(device.name)}</h2>
+        <h2>${escapeHtml(device.name)}</h2>${aviso}
+        <div class="metric"><span>Versión app</span><strong>${escapeHtml(device.appVersion || '--')}</strong></div>
         <div class="metric"><span>Estado</span><strong>${device.online ? 'Online' : 'Offline'}</strong></div>
         <div class="metric"><span>Modelo</span><strong>${escapeHtml(device.model || device.platform || '--')}</strong></div>
         <div class="metric"><span>Latencia GPS → servidor</span><strong class="${latencyClass(loc?.latencyMs)}">${loc?.latencyMs != null ? `${loc.latencyMs.toFixed(0)} ms` : '--'}</strong></div>
