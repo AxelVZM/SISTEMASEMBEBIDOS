@@ -56,6 +56,7 @@ class FiltroGps {
     this.velocidadPeatonMaxima = 3,
     this.velocidadVehiculo = 2.5,
     this.longitudPaso = 0.8,
+    this.muestrasPromedioMaximas = 120,
   });
 
   final double precisionMaxima;
@@ -70,6 +71,9 @@ class FiltroGps {
   /// Longitud de un paso (m) para el presupuesto de distancia.
   final double longitudPaso;
 
+  /// Lecturas en reposo que se promedian (120 ≈ 1 min a 500 ms).
+  final int muestrasPromedioMaximas;
+
   static const _metrosPorGradoLat = 111320.0;
 
   LatLng? _ultimo;
@@ -77,11 +81,13 @@ class FiltroGps {
   int _tiempoMs = 0;
   double? _ultimoRumbo;
   int _rechazosSeguidos = 0;
+  final _muestrasQuieto = <(LatLng, double)>[];
 
   bool get inicializado => _ultimo != null;
 
   void reiniciar() {
     _ultimo = null;
+    _muestrasQuieto.clear();
     _ultimoRumbo = null;
     _rechazosSeguidos = 0;
   }
@@ -136,19 +142,7 @@ class FiltroGps {
       //    velocidad GNSS de caminata). Agarrar el teléfono no son pasos.
       final hayEvidencia = pasos != null ? pasos > 0 : velocidadValida >= 0.7;
 
-      if (!hayEvidencia) {
-        // Quieto: el punto mostrado es la lectura MÁS PRECISA recibida. Si
-        // llega una mejor que cae dentro del margen de error de la actual,
-        // se corrige la posición sin trazar tramo. Así un primer punto malo
-        // (±17 m bajo techo) converge a la posición real, pero nunca salta
-        // fuera de su margen de error.
-        if (precisionValida < _precisionUltimo * 0.9 &&
-            distancia <= _precisionUltimo) {
-          return _aceptar(punto, precisionValida, 0, _ultimoRumbo, tiempoMs,
-              false, esCorreccion: true);
-        }
-        return _mantener();
-      }
+      if (!hayEvidencia) return _quieto(punto, precisionValida, tiempoMs);
 
       // 2) Caminando: cada lectura se muestra al instante (< 1 s), salvo
       //    saltos incoherentes con lo caminado (con 2 pasos no se avanzan
@@ -172,6 +166,70 @@ class FiltroGps {
     );
   }
 
+  /// Quieto: la posición es el promedio de las lecturas recibidas en reposo,
+  /// ponderado por precisión (1/σ²). Una sola lectura tiene ±3-10 m de error
+  /// aleatorio; el promedio de muchas se acerca a la posición real. Se
+  /// descartan saltos fuera del margen de error y el punto solo se corrige
+  /// cuando el promedio se aleja de forma medible (no tiembla).
+  LecturaFiltrada _quieto(LatLng punto, double precision, int tiempoMs) {
+    final media = _mediaQuieto();
+    if (media != null &&
+        _distanciaMetros(media, punto) > 2 * math.max(precision, 5)) {
+      return _mantener();
+    }
+    _muestrasQuieto.add((punto, precision));
+    if (_muestrasQuieto.length > muestrasPromedioMaximas) {
+      _muestrasQuieto.removeAt(0);
+    }
+
+    final nueva = _mediaQuieto()!;
+    final precisionMedia = _precisionMediaQuieto();
+    // Una lectura mucho más precisa corrige al instante; si no, se esperan
+    // varias muestras para que el promedio sea fiable.
+    final mejorPrecision = precision < _precisionUltimo * 0.9;
+    if (!mejorPrecision && _muestrasQuieto.length < 8) return _mantener();
+    // Solo se mueve si el cambio supera la incertidumbre del promedio
+    // (σ/√n): con pocas muestras o mucho ruido el punto no tiembla.
+    final umbral = mejorPrecision
+        ? 1.0
+        : math.max(
+            1.0,
+            1.5 * precisionMedia / math.sqrt(_muestrasQuieto.length),
+          );
+    if (_distanciaMetros(_ultimo!, nueva) < umbral) return _mantener();
+    return _aceptar(
+      nueva,
+      math.min(_precisionUltimo, precisionMedia),
+      0,
+      _ultimoRumbo,
+      tiempoMs,
+      false,
+      esCorreccion: true,
+      reiniciarPromedio: false,
+    );
+  }
+
+  LatLng? _mediaQuieto() {
+    if (_muestrasQuieto.isEmpty) return null;
+    var suma = 0.0, lat = 0.0, lng = 0.0;
+    for (final (p, precision) in _muestrasQuieto) {
+      final peso = 1 / (precision * precision);
+      suma += peso;
+      lat += p.latitude * peso;
+      lng += p.longitude * peso;
+    }
+    return LatLng(lat / suma, lng / suma);
+  }
+
+  /// Precisión típica de las muestras en reposo (media armónica de σ²).
+  double _precisionMediaQuieto() {
+    var suma = 0.0;
+    for (final (_, precision) in _muestrasQuieto) {
+      suma += 1 / (precision * precision);
+    }
+    return math.sqrt(_muestrasQuieto.length / suma);
+  }
+
   /// Mantiene el último punto real (la lectura nueva se considera ruido).
   /// No actualiza la hora de referencia, para que un desplazamiento real
   /// lento se acepte cuando el tiempo acumulado lo haga plausible.
@@ -192,7 +250,14 @@ class FiltroGps {
     int tiempoMs,
     bool enMovimiento, {
     bool esCorreccion = false,
+    bool reiniciarPromedio = true,
   }) {
+    // Tras un desplazamiento, el promedio en reposo empieza desde este punto.
+    if (reiniciarPromedio) {
+      _muestrasQuieto
+        ..clear()
+        ..add((punto, precision));
+    }
     _ultimo = punto;
     _precisionUltimo = precision;
     _tiempoMs = tiempoMs;

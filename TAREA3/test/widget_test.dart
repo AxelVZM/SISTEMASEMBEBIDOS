@@ -65,6 +65,9 @@ void main() {
       final r2 = filtro.procesar(latitud: p2, longitud: lng, precision: 6.8, velocidad: 0.4, rumbo: 0, tiempoMs: 15000, pasosDesdeUltimoPunto: 0)!;
       expect(r2.esCorreccion, isTrue);
       expect(r2.enMovimiento, isFalse);
+      // La lectura precisa domina el promedio (pesa 1/σ²).
+      expect((r2.punto.latitude - p2).abs() * 111320, lessThan(1));
+      final fijo = r2.punto.latitude;
       // +12.4 m y +6.6 m más con solo 2 pasos: saltos del GPS → se ignoran.
       for (final (salto, precision, t) in [(12.4, 5.6, 34000), (19.0, 5.4, 40000)]) {
         final r = filtro.procesar(
@@ -73,11 +76,11 @@ void main() {
           pasosDesdeUltimoPunto: 2,
         )!;
         expect(r.esNuevo, isFalse, reason: 'salto de $salto m con 2 pasos');
-        expect(r.punto.latitude, p2);
+        expect(r.punto.latitude, fijo);
       }
     });
 
-    test('quieto (acelerómetro): el ruido no mueve el punto', () {
+    test('quieto (acelerómetro): el ruido de ±15 m no desplaza el punto', () {
       final filtro = FiltroGps();
       const lat = -13.53195, lng = -71.96746;
       filtro.procesar(latitud: lat, longitud: lng, precision: 15, velocidad: 0, rumbo: 0, tiempoMs: 0);
@@ -89,10 +92,31 @@ void main() {
           precision: 15, velocidad: 0, rumbo: 0, tiempoMs: i * 1000,
           pasosDesdeUltimoPunto: 0,
         )!;
-        expect(r.esNuevo, isFalse);
         expect(r.enMovimiento, isFalse);
-        expect(const Distance().as(LengthUnit.Meter, const LatLng(lat, lng), r.punto), 0);
+        // Solo el promedio puede ajustar el punto: queda junto a la posición real.
+        expect(const Distance().as(LengthUnit.Meter, const LatLng(lat, lng), r.punto), lessThanOrEqualTo(3));
       }
+    });
+
+    test('quieto: un primer punto desviado 6 m converge a la posición real', () {
+      final filtro = FiltroGps();
+      const lat = -13.53195, lng = -71.96746;
+      // Primera lectura ±4 m pero desviada 6 m al norte.
+      filtro.procesar(latitud: lat + 6 / 111320, longitud: lng, precision: 4, velocidad: 0, rumbo: 0, tiempoMs: 0);
+      LatLng? punto;
+      // 40 lecturas ±4 m con ruido alrededor de la posición real.
+      for (var i = 1; i <= 40; i++) {
+        final dLat = ((i * 37) % 11 - 5) / 5 * 4 / 111320;
+        final dLng = ((i * 53) % 13 - 6) / 6 * 4 / 108240;
+        final r = filtro.procesar(
+          latitud: lat + dLat, longitud: lng + dLng,
+          precision: 4, velocidad: 0, rumbo: 0, tiempoMs: i * 500,
+          pasosDesdeUltimoPunto: 0,
+        )!;
+        expect(r.enMovimiento, isFalse);
+        punto = r.punto;
+      }
+      expect(const Distance().as(LengthUnit.Meter, const LatLng(lat, lng), punto!), lessThan(1.5));
     });
 
     test('datos reales del Honor quieto: saltos de 10-30 m se ignoran', () {
@@ -139,7 +163,7 @@ void main() {
       // Lectura mejor (±8 m) pero a 20 m: fuera del margen → se ignora.
       final b = filtro.procesar(latitud: -13.5 + 29 / 111320, longitud: -71.9, precision: 8, velocidad: 0, rumbo: 0, tiempoMs: 2000, pasosDesdeUltimoPunto: 0)!;
       expect(b.esNuevo, isFalse);
-      expect(b.punto.latitude, -13.5 + 9 / 111320);
+      expect(b.punto, a.punto);
     });
 
     test('al volver a caminar sigue el punto real', () {
