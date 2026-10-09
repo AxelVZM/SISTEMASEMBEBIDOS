@@ -39,13 +39,30 @@ class LecturaFiltrada {
 /// lectura del GPS. Solo descarta lo que es claramente erróneo:
 /// - lecturas con precisión peor que [precisionMaxima];
 /// - saltos físicamente imposibles (más de [velocidadMaximaFisica] m/s);
-/// - el "ruido" cuando el acelerómetro indica que el teléfono está quieto
-///   (se mantiene el último punto real).
+/// - a pie, desplazamientos que no están justificados por los pasos
+///   detectados (agarrar o mover el teléfono no son pasos): se mantiene el
+///   último punto real;
+/// - en vehículo (velocidad GNSS alta) se acepta cada punto.
 class FiltroGps {
-  FiltroGps({this.precisionMaxima = 30, this.velocidadMaximaFisica = 70});
+  FiltroGps({
+    this.precisionMaxima = 30,
+    this.velocidadMaximaFisica = 70,
+    this.velocidadPeatonMaxima = 3,
+    this.velocidadVehiculo = 2.5,
+    this.longitudPaso = 0.8,
+  });
 
   final double precisionMaxima;
   final double velocidadMaximaFisica;
+
+  /// Velocidad máxima a pie (m/s) cuando no hay datos del acelerómetro.
+  final double velocidadPeatonMaxima;
+
+  /// Desde esta velocidad GNSS (m/s, 9 km/h) se considera vehículo.
+  final double velocidadVehiculo;
+
+  /// Longitud de un paso (m) para el presupuesto de distancia.
+  final double longitudPaso;
 
   static const _metrosPorGradoLat = 111320.0;
 
@@ -71,7 +88,7 @@ class FiltroGps {
     required double velocidad,
     required double rumbo,
     required int tiempoMs,
-    bool sensorEnReposo = false,
+    int? pasosDesdeUltimoPunto,
   }) {
     if (!latitud.isFinite || !longitud.isFinite) return null;
     final precisionValida = precision.isFinite && precision > 0 ? precision : 99.0;
@@ -103,21 +120,25 @@ class FiltroGps {
     }
     _rechazosSeguidos = 0;
 
-    // Teléfono quieto (acelerómetro) y GPS sin velocidad: la nueva lectura
-    // es ruido; se mantiene el último punto real. Un salto grande (o una
-    // velocidad real, p. ej. vehículo) sí se acepta.
-    if (sensorEnReposo &&
-        velocidadValida < 1.0 &&
-        distancia < math.max(25.0, precisionValida * 2)) {
-      _tiempoMs = tiempoMs;
-      return LecturaFiltrada(
-        punto: ultimo,
-        precision: _precisionUltimo,
-        velocidad: 0,
-        rumbo: _ultimoRumbo,
-        enMovimiento: false,
-        esNuevo: false,
-      );
+    // Vehículo/bicicleta: la velocidad Doppler del GNSS es la evidencia de
+    // movimiento (no hay pasos). Se acepta el punto tal cual.
+    final enVehiculo = velocidadValida >= velocidadVehiculo;
+    if (!enVehiculo) {
+      final pasos = pasosDesdeUltimoPunto;
+      if (pasos != null) {
+        // A pie, cada paso permite avanzar ~[longitudPaso] m. Sin pasos el
+        // teléfono no se ha desplazado (agarrarlo o moverlo en la mano no
+        // son pasos) y el salto del GPS es ruido: se mantiene el último
+        // punto real hasta que los pasos justifiquen la distancia.
+        final presupuesto = pasos * longitudPaso * 1.3 + 2.0;
+        if (pasos == 0 || distancia > presupuesto) {
+          if (distancia < 150) return _mantener();
+        }
+      } else if (distancia >
+          velocidadPeatonMaxima * (dtMs / 1000) + precisionValida) {
+        // Sin acelerómetro: límite de velocidad de una persona.
+        return _mantener();
+      }
     }
 
     final rumboCalculado = velocidadValida > 1.0 && rumbo.isFinite && rumbo >= 0
@@ -132,6 +153,18 @@ class FiltroGps {
       velocidadValida > 0.5 || distancia >= 1.0,
     );
   }
+
+  /// Mantiene el último punto real (la lectura nueva se considera ruido).
+  /// No actualiza la hora de referencia, para que un desplazamiento real
+  /// lento se acepte cuando el tiempo acumulado lo haga plausible.
+  LecturaFiltrada _mantener() => LecturaFiltrada(
+    punto: _ultimo!,
+    precision: _precisionUltimo,
+    velocidad: 0,
+    rumbo: _ultimoRumbo,
+    enMovimiento: false,
+    esNuevo: false,
+  );
 
   LecturaFiltrada _aceptar(
     LatLng punto,

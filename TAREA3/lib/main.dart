@@ -16,10 +16,11 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'modelos/ubicacion_local.dart';
 import 'servicios/base_datos_local.dart';
+import 'servicios/detector_pasos.dart';
 import 'servicios/filtro_gps.dart';
 import 'servicios/seguimiento_remoto.dart';
 
-const _versionApp = '1.4.0';
+const _versionApp = '1.6.0';
 const _canalPantalla = MethodChannel('movimiento/pantalla');
 
 /// Mantiene la pantalla encendida mientras se registra (solo Android).
@@ -177,7 +178,7 @@ class _PantallaMovimientoState extends State<PantallaMovimiento> {
   // reconstruir toda la pantalla (el acelerómetro antes redibujaba el mapa
   // a ~60 Hz y causaba tirones).
   final _posicionMostrada = ValueNotifier<LatLng?>(null);
-  final _aceleracion = ValueNotifier<double>(0);
+  final _pasos = ValueNotifier<int>(0);
   final _telemetria = ValueNotifier(const Telemetria());
 
   double _rumbo = 0;
@@ -188,13 +189,12 @@ class _PantallaMovimientoState extends State<PantallaMovimiento> {
   Timer? _temporizadorBateria;
   Timer? _temporizadorEdad;
 
-  // Detección de reposo: desviación estándar del módulo de la aceleración
-  // (con gravedad) en los últimos 2 s. Al usar la variación y no el valor
-  // absoluto no le afecta el sesgo del sensor de cada fabricante.
-  static const _ventanaReposoMs = 2000;
-  static const _umbralReposo = 0.12; // m/s² de desviación estándar
-  final _ventanaAceleracion = <(int, double)>[];
-  double _vibracion = 0;
+  // Podómetro: solo los pasos reales (picos rítmicos) justifican que la
+  // posición avance a pie. Agarrar o mover el teléfono no son pasos.
+  final _detectorPasos = DetectorPasos();
+  int _pasosDesdeUltimoPunto = 0;
+  int? _ultimoSensorMs;
+  int _ultimoLogMs = 0;
   double _distanciaMetros = 0;
   double _velocidadMaximaKmh = 0;
   double _velocidadTotalKmh = 0;
@@ -353,7 +353,9 @@ class _PantallaMovimientoState extends State<PantallaMovimiento> {
     if (_deviceId.isEmpty) await _cargarConfiguracion();
 
     _filtro.reiniciar();
-    _ventanaAceleracion.clear();
+    _detectorPasos.reiniciar();
+    _pasosDesdeUltimoPunto = 0;
+    _pasos.value = 0;
     _nivelBateria = await _leerBateria();
     _bateriaInicio = _nivelBateria ?? 0;
     _seguimientoRemoto.bateria = _nivelBateria;
@@ -454,8 +456,9 @@ class _PantallaMovimientoState extends State<PantallaMovimiento> {
     _ubicacionSuscripcion = Geolocator.getPositionStream(
       locationSettings: _configuracionGps(),
     ).listen(_agregarUbicacion, onError: _errorGps);
+    // 50 Hz: suficiente para distinguir el ritmo de los pasos (~2 Hz).
     _sensorSuscripcion = accelerometerEventStream(
-      samplingPeriod: SensorInterval.uiInterval,
+      samplingPeriod: SensorInterval.gameInterval,
     ).listen(_leerAcelerometro, onError: (_) {});
     unawaited(_primeraPosicion());
   }
@@ -536,8 +539,10 @@ class _PantallaMovimientoState extends State<PantallaMovimiento> {
       velocidad: posicion.speed,
       rumbo: posicion.heading,
       tiempoMs: ahora.subtract(edad).millisecondsSinceEpoch,
-      sensorEnReposo: _sensorEnReposo,
+      // Sin acelerómetro activo (null) el filtro usa un límite de velocidad.
+      pasosDesdeUltimoPunto: _sensorActivo ? _pasosDesdeUltimoPunto : null,
     );
+    if (lectura != null && lectura.esNuevo) _pasosDesdeUltimoPunto = 0;
 
     if (lectura == null) {
       _telemetria.value = Telemetria(
@@ -658,44 +663,35 @@ class _PantallaMovimientoState extends State<PantallaMovimiento> {
       evento.x * evento.x + evento.y * evento.y + evento.z * evento.z,
     );
     final ahora = DateTime.now().millisecondsSinceEpoch;
-    _ventanaAceleracion.add((ahora, modulo));
-    while (_ventanaAceleracion.isNotEmpty &&
-        ahora - _ventanaAceleracion.first.$1 > _ventanaReposoMs) {
-      _ventanaAceleracion.removeAt(0);
+    _ultimoSensorMs = ahora;
+    final nuevos = _detectorPasos.procesar(modulo, ahora);
+    if (nuevos > 0) {
+      _pasosDesdeUltimoPunto += nuevos;
+      _pasos.value = _detectorPasos.pasosTotales;
     }
-    // Desviación estándar en la ventana = cuánto vibra/se mueve el teléfono.
-    final n = _ventanaAceleracion.length;
-    final media = _ventanaAceleracion.fold(0.0, (s, m) => s + m.$2) / n;
-    final varianza = _ventanaAceleracion.fold(
-          0.0,
-          (s, m) => s + (m.$2 - media) * (m.$2 - media),
-        ) /
-        n;
-    _vibracion = math.sqrt(varianza);
-    _aceleracion.value = _vibracion;
     _aceleracionTotal += (modulo - 9.81).abs();
     _muestrasAceleracion++;
 
-    final moviendose = !_sensorEnReposo;
+    // Diagnóstico (visible con: adb logcat -s flutter).
+    if (ahora - _ultimoLogMs > 2000) {
+      _ultimoLogMs = ahora;
+      debugPrint(
+        '[rastro] pasos=${_detectorPasos.pasosTotales} '
+        'pendientes=$_pasosDesdeUltimoPunto '
+        'caminando=${_detectorPasos.caminando(ahora)}',
+      );
+    }
+
+    final moviendose = _detectorPasos.caminando(ahora);
     if (moviendose != _estaMoviendose && mounted) {
       setState(() => _estaMoviendose = moviendose);
     }
   }
 
-  /// true si el acelerómetro indica que el teléfono está quieto: la
-  /// aceleración casi no varía en los últimos 2 s. Caminando la desviación
-  /// es de 1-3 m/s²; sobre la mesa o quieto en la mano, < 0.1.
-  bool get _sensorEnReposo {
-    if (_ventanaAceleracion.isEmpty) return false;
-    final ahora = DateTime.now().millisecondsSinceEpoch;
-    final primero = _ventanaAceleracion.first.$1;
-    final ultimo = _ventanaAceleracion.last.$1;
-    // Sin datos recientes (sensor detenido) o ventana incompleta: no se asume reposo.
-    if (ahora - ultimo > 1000 || ultimo - primero < _ventanaReposoMs * 0.75) {
-      return false;
-    }
-    return _vibracion < _umbralReposo;
-  }
+  /// true si el acelerómetro está entregando datos.
+  bool get _sensorActivo =>
+      _ultimoSensorMs != null &&
+      DateTime.now().millisecondsSinceEpoch - _ultimoSensorMs! < 1500;
 
   Future<void> _detenerRegistro() async {
     await _ubicacionSuscripcion?.cancel();
@@ -760,7 +756,7 @@ class _PantallaMovimientoState extends State<PantallaMovimiento> {
       await _sensorSuscripcion?.cancel();
       _ubicacionSuscripcion = null;
       _sensorSuscripcion = null;
-      _ventanaAceleracion.clear();
+      _ultimoSensorMs = null;
       if (mounted) setState(() => _pausado = true);
     }
   }
@@ -789,7 +785,7 @@ class _PantallaMovimientoState extends State<PantallaMovimiento> {
     _temporizadorEdad?.cancel();
     _seguimientoRemoto.dispose();
     _posicionMostrada.dispose();
-    _aceleracion.dispose();
+    _pasos.dispose();
     _telemetria.dispose();
     super.dispose();
   }
@@ -929,7 +925,7 @@ class _PantallaMovimientoState extends State<PantallaMovimiento> {
                     pausado: _pausado,
                     esperandoFix: _esperandoFix,
                     moviendose: _estaMoviendose,
-                    aceleracion: _aceleracion,
+                    pasos: _pasos,
                     telemetria: _telemetria,
                     remoto: _seguimientoRemoto.estado,
                   ),
@@ -1125,7 +1121,7 @@ class _EstadoRegistro extends StatelessWidget {
     required this.pausado,
     required this.esperandoFix,
     required this.moviendose,
-    required this.aceleracion,
+    required this.pasos,
     required this.telemetria,
     required this.remoto,
   });
@@ -1134,7 +1130,7 @@ class _EstadoRegistro extends StatelessWidget {
   final bool pausado;
   final bool esperandoFix;
   final bool moviendose;
-  final ValueListenable<double> aceleracion;
+  final ValueListenable<int> pasos;
   final ValueListenable<Telemetria> telemetria;
   final ValueListenable<EstadoRemoto> remoto;
 
@@ -1178,10 +1174,10 @@ class _EstadoRegistro extends StatelessWidget {
                     style: const TextStyle(fontWeight: FontWeight.w700),
                   ),
                 ),
-                ValueListenableBuilder<double>(
-                  valueListenable: aceleracion,
+                ValueListenableBuilder<int>(
+                  valueListenable: pasos,
                   builder: (context, valor, _) => Text(
-                    '${valor.toStringAsFixed(1)} m/s²',
+                    '$valor pasos',
                     style: tema.textTheme.labelMedium,
                   ),
                 ),
