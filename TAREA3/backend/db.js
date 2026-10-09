@@ -307,6 +307,12 @@ async function lastSession(deviceId, gapMs, limit = 10000) {
   return rows.map(mapLocation);
 }
 
+/** Elimina un punto concreto (cuando el celular lo corrige por uno más preciso). */
+async function deleteSample(sampleId) {
+  await flush();
+  await pool.query('DELETE FROM locations WHERE sample_id = $1', [sampleId]);
+}
+
 async function sampleExists(sampleId) {
   const { rowCount } = await pool.query('SELECT 1 FROM locations WHERE sample_id = $1', [sampleId]);
   return rowCount > 0;
@@ -337,7 +343,7 @@ module.exports = {
   pool, migrate, ping, flush, close,
   enqueueLocation, touchDevice,
   upsertDevice, ensureDevice, listDevices, getDevice, deleteDevice, deleteLocations,
-  latestLocation, historyRange, lastSession, sampleExists,
+  latestLocation, historyRange, lastSession, sampleExists, deleteSample,
   createUser, findUserByEmail,
   pendingWrites: () => queue.length,
 };

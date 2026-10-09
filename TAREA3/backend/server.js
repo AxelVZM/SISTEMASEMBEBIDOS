@@ -186,7 +186,12 @@ async function acceptLocation(deviceId, body) {
   if (!wasOnline) publishDevice(device);
   const previous = latestByDevice.get(deviceId);
   if (!previous || previous.timestamp <= location.timestamp) latestByDevice.set(deviceId, location);
-  broadcast({ type: 'location.updated', data: { ...location, live, serverTime: Date.now() } });
+  // Corrección: el punto nuevo reemplaza al anterior también en la base.
+  if (body.correction === true && live && previous && previous.sampleId !== sampleId) {
+    db.deleteSample(previous.sampleId).catch((error) => console.error('[db] No se pudo reemplazar el punto', error.message));
+  }
+  // correction: el punto corrige la posición anterior (no es desplazamiento).
+  broadcast({ type: 'location.updated', data: { ...location, live, correction: body.correction === true, serverTime: Date.now() } });
 
   // Solo las muestras en vivo cuentan para la métrica (no la cola offline).
   if (live && latencyMs < 60_000) {

@@ -12,6 +12,7 @@ class UbicacionLocal {
     this.altitude,
     this.battery,
     this.syncStatus = 'pending',
+    this.correccion = false,
   });
 
   final int? id;
@@ -26,6 +27,10 @@ class UbicacionLocal {
   final double? altitude;
   final int? battery;
   final String syncStatus;
+
+  /// El punto corrige la posición anterior (no es un desplazamiento). Solo
+  /// se usa en el envío en vivo para que el panel reemplace el último punto.
+  final bool correccion;
 
   Map<String, Object?> toMap() => {
         'id': id,
@@ -55,6 +60,7 @@ class UbicacionLocal {
         'battery': battery,
         'timestamp': timestamp.toUtc().toIso8601String(),
         'live': enVivo,
+        if (correccion && enVivo) 'correction': true,
       };
 
   factory UbicacionLocal.fromMap(Map<String, Object?> map) {

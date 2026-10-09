@@ -195,7 +195,17 @@
       }
       track.prevTime = time;
       track.last = loc;
-      addRoutePoint(track, loc);
+      if (loc.correction && track.line.getLatLngs().length) {
+        // Corrección de la posición (lectura más precisa estando quieto):
+        // se reemplaza el último punto en lugar de trazar un tramo.
+        const puntos = track.line.getLatLngs();
+        puntos[puntos.length - 1] = L.latLng(loc.latitude, loc.longitude);
+        track.line.setLatLngs(puntos);
+        const capas = track.points.getLayers();
+        capas.at(-1)?.setLatLng([loc.latitude, loc.longitude]);
+      } else {
+        addRoutePoint(track, loc);
+      }
       placeMarker(loc.deviceId, loc);
       if (state.follow && state.selected === loc.deviceId) map.panTo([loc.latitude, loc.longitude], { animate: false });
       if (state.selected === loc.deviceId) scheduleDetails();

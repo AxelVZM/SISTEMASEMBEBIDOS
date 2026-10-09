@@ -11,6 +11,7 @@ class LecturaFiltrada {
     required this.rumbo,
     required this.enMovimiento,
     required this.esNuevo,
+    this.esCorreccion = false,
   });
 
   /// Posición real del GPS (sin suavizar ni interpolar).
@@ -31,6 +32,10 @@ class LecturaFiltrada {
   /// true si es una lectura nueva aceptada; false si se mantiene el último
   /// punto real porque el teléfono está quieto (la lectura era ruido).
   final bool esNuevo;
+
+  /// true si el punto corrige la posición actual (lectura mucho más precisa
+  /// estando quieto): reemplaza el último punto en vez de trazar un tramo.
+  final bool esCorreccion;
 }
 
 /// Validador de lecturas GPS, punto por punto.
@@ -39,9 +44,10 @@ class LecturaFiltrada {
 /// lectura del GPS. Solo descarta lo que es claramente erróneo:
 /// - lecturas con precisión peor que [precisionMaxima];
 /// - saltos físicamente imposibles (más de [velocidadMaximaFisica] m/s);
-/// - a pie, desplazamientos que no están justificados por los pasos
-///   detectados (agarrar o mover el teléfono no son pasos): se mantiene el
-///   último punto real;
+/// - a pie: sin pasos detectados no hay movimiento (agarrar el teléfono no
+///   son pasos); un desplazamiento menor que el error del GPS no es medible;
+///   y un salto mayor que lo que permiten los pasos dados es ruido. En esos
+///   casos se mantiene el último punto real;
 /// - en vehículo (velocidad GNSS alta) se acepta cada punto.
 class FiltroGps {
   FiltroGps({
@@ -123,22 +129,35 @@ class FiltroGps {
     // Vehículo/bicicleta: la velocidad Doppler del GNSS es la evidencia de
     // movimiento (no hay pasos). Se acepta el punto tal cual.
     final enVehiculo = velocidadValida >= velocidadVehiculo;
-    if (!enVehiculo) {
+    if (!enVehiculo && distancia < 150) {
       final pasos = pasosDesdeUltimoPunto;
-      if (pasos != null) {
-        // A pie, cada paso permite avanzar ~[longitudPaso] m. Sin pasos el
-        // teléfono no se ha desplazado (agarrarlo o moverlo en la mano no
-        // son pasos) y el salto del GPS es ruido: se mantiene el último
-        // punto real hasta que los pasos justifiquen la distancia.
-        final presupuesto = pasos * longitudPaso * 1.3 + 2.0;
-        if (pasos == 0 || distancia > presupuesto) {
-          if (distancia < 150) return _mantener();
-        }
-      } else if (distancia >
-          velocidadPeatonMaxima * (dtMs / 1000) + precisionValida) {
-        // Sin acelerómetro: límite de velocidad de una persona.
-        return _mantener();
+
+      // Corrección del punto: llega una lectura mucho más precisa que la
+      // actual y compatible con su error (p. ej. el primer punto era ±18 m y
+      // ahora hay ±6 m). No es movimiento: se corrige dónde estás.
+      if ((pasos ?? 0) <= 2 &&
+          precisionValida <= _precisionUltimo * 0.6 &&
+          distancia <= _precisionUltimo + precisionValida) {
+        return _aceptar(punto, precisionValida, 0, _ultimoRumbo, tiempoMs,
+            false, esCorreccion: true);
       }
+
+      // 1) Evidencia de movimiento: pasos detectados (o, sin acelerómetro,
+      //    velocidad GNSS de caminata). Agarrar el teléfono no son pasos.
+      final hayEvidencia = pasos != null ? pasos > 0 : velocidadValida >= 0.7;
+      if (!hayEvidencia) return _mantener();
+
+      // 2) El desplazamiento debe superar el error del GPS: un paso (~0.8 m)
+      //    es mucho menor que el ruido (±5-15 m) y no se puede medir. Se
+      //    espera hasta que la distancia recorrida sea real y medible.
+      if (distancia < math.max(3.0, precisionValida * 0.8)) return _mantener();
+
+      // 3) Y debe ser coherente con lo que se caminó: con 2 pasos no se
+      //    puede haber avanzado 12 m (eso es un salto del GPS).
+      final maximo = pasos != null
+          ? pasos * longitudPaso * 1.5 + 1.0
+          : velocidadPeatonMaxima * (dtMs / 1000) + 1.0;
+      if (distancia > maximo) return _mantener();
     }
 
     final rumboCalculado = velocidadValida > 1.0 && rumbo.isFinite && rumbo >= 0
@@ -172,8 +191,9 @@ class FiltroGps {
     double velocidad,
     double? rumbo,
     int tiempoMs,
-    bool enMovimiento,
-  ) {
+    bool enMovimiento, {
+    bool esCorreccion = false,
+  }) {
     _ultimo = punto;
     _precisionUltimo = precision;
     _tiempoMs = tiempoMs;
@@ -185,6 +205,7 @@ class FiltroGps {
       rumbo: _ultimoRumbo,
       enMovimiento: enMovimiento,
       esNuevo: true,
+      esCorreccion: esCorreccion,
     );
   }
 

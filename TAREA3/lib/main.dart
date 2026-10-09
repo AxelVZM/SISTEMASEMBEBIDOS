@@ -20,7 +20,7 @@ import 'servicios/detector_pasos.dart';
 import 'servicios/filtro_gps.dart';
 import 'servicios/seguimiento_remoto.dart';
 
-const _versionApp = '2.0.0';
+const _versionApp = '2.1.0';
 const _canalPantalla = MethodChannel('movimiento/pantalla');
 
 /// Mantiene la pantalla encendida mientras se registra (solo Android).
@@ -193,6 +193,7 @@ class _PantallaMovimientoState extends State<PantallaMovimiento> {
   // posición avance a pie. Agarrar o mover el teléfono no son pasos.
   final _detectorPasos = DetectorPasos();
   int _pasosDesdeUltimoPunto = 0;
+  int? _ultimoPasoMs;
   int? _ultimoSensorMs;
   int _ultimoLogMs = 0;
   double _distanciaMetros = 0;
@@ -355,6 +356,7 @@ class _PantallaMovimientoState extends State<PantallaMovimiento> {
     _filtro.reiniciar();
     _detectorPasos.reiniciar();
     _pasosDesdeUltimoPunto = 0;
+    _ultimoPasoMs = null;
     _pasos.value = 0;
     _nivelBateria = await _leerBateria();
     _bateriaInicio = _nivelBateria ?? 0;
@@ -532,6 +534,13 @@ class _PantallaMovimientoState extends State<PantallaMovimiento> {
       edad = Duration.zero;
     }
 
+    // Los pasos caducan si se dejó de caminar: así no se acumulan y luego
+    // justifican un salto del GPS estando quieto.
+    final ahoraMs = ahora.millisecondsSinceEpoch;
+    if (_ultimoPasoMs != null && ahoraMs - _ultimoPasoMs! > 8000) {
+      _pasosDesdeUltimoPunto = 0;
+    }
+
     final lectura = _filtro.procesar(
       latitud: posicion.latitude,
       longitud: posicion.longitude,
@@ -579,6 +588,10 @@ class _PantallaMovimientoState extends State<PantallaMovimiento> {
     if (_nuevoSegmento || _segmentos.isEmpty) {
       _segmentos.add([punto]);
       _nuevoSegmento = false;
+    } else if (lectura.esCorreccion) {
+      // Lectura mucho más precisa estando quieto: corrige el último punto
+      // (no es un desplazamiento, no se dibuja tramo ni se suma distancia).
+      _segmentos.last[_segmentos.last.length - 1] = punto;
     } else {
       final segmento = _segmentos.last;
       final distancia = Geolocator.distanceBetween(
@@ -627,6 +640,7 @@ class _PantallaMovimientoState extends State<PantallaMovimiento> {
           heading: _rumbo,
           altitude: posicion.altitude.isFinite ? posicion.altitude : null,
           battery: _nivelBateria,
+          correccion: lectura.esCorreccion,
         ),
       ),
     );
@@ -668,6 +682,7 @@ class _PantallaMovimientoState extends State<PantallaMovimiento> {
     final nuevos = _detectorPasos.procesar(modulo, ahora);
     if (nuevos > 0) {
       _pasosDesdeUltimoPunto += nuevos;
+      _ultimoPasoMs = ahora;
       _pasos.value = _detectorPasos.pasosTotales;
     }
     _aceleracionTotal += (modulo - 9.81).abs();
