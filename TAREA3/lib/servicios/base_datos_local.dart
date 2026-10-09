@@ -15,7 +15,7 @@ class BaseDatosLocal {
     final ruta = join(await getDatabasesPath(), 'rastro_local.db');
     return _baseDatos = await openDatabase(
       ruta,
-      version: 1,
+      version: 2,
       onCreate: (db, version) async {
         await db.execute('''
           CREATE TABLE locations (
@@ -25,12 +25,26 @@ class BaseDatosLocal {
             longitude REAL NOT NULL,
             timestamp TEXT NOT NULL,
             accuracy REAL NOT NULL,
+            speed REAL NOT NULL DEFAULT 0,
+            heading REAL NOT NULL DEFAULT 0,
+            battery INTEGER,
             sync_status TEXT NOT NULL DEFAULT 'pending'
           )
         ''');
         await db.execute(
           'CREATE INDEX idx_locations_timestamp ON locations(timestamp)',
         );
+      },
+      onUpgrade: (db, oldVersion, newVersion) async {
+        if (oldVersion < 2) {
+          await db.execute(
+            'ALTER TABLE locations ADD COLUMN speed REAL NOT NULL DEFAULT 0',
+          );
+          await db.execute(
+            'ALTER TABLE locations ADD COLUMN heading REAL NOT NULL DEFAULT 0',
+          );
+          await db.execute('ALTER TABLE locations ADD COLUMN battery INTEGER');
+        }
       },
     );
   }

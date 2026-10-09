@@ -20,6 +20,15 @@ const data = fs.existsSync(dbFile)
   ? JSON.parse(fs.readFileSync(dbFile, 'utf8'))
   : { nextUserId: 1, users: [], devices: [], locations: [] };
 const saveData = () => fs.writeFileSync(dbFile, JSON.stringify(data, null, 2));
+let persistScheduled = false;
+function persistSoon() {
+  if (persistScheduled) return;
+  persistScheduled = true;
+  setImmediate(() => {
+    persistScheduled = false;
+    saveData();
+  });
+}
 const app = express();
 app.use(helmet({ contentSecurityPolicy: false }));
 app.use(cors({ origin: process.env.CORS_ORIGIN || 'http://localhost:8080' }));
@@ -51,10 +60,62 @@ function deviceForUser(deviceId, userId) {
 }
 
 const sockets = new Set();
+const seenSamples = new Set(data.locations.map((location) => location.sampleId).filter(Boolean));
+const latencySamples = [];
+let discardedSamples = 0;
 function broadcast(message) {
   const data = JSON.stringify(message);
   for (const socket of sockets) {
     if (socket.readyState === 1) socket.send(data);
+  }
+
+  function recordLatency(location, receivedAt) {
+    const acquisition = Date.parse(location.timestamp);
+    const latencyMs = Number.isFinite(acquisition) ? Math.max(0, Date.now() - acquisition) : null;
+    if (latencyMs !== null) {
+      latencySamples.push(latencyMs);
+      if (latencySamples.length > 5000) latencySamples.shift();
+    }
+    return {
+      ...location,
+      receivedAt,
+      broadcastAt: new Date().toISOString(),
+      latencyMs,
+    };
+  }
+
+  function acceptLocation(deviceId, body) {
+    if (!data.devices.some((device) => device.device_id === deviceId)) {
+      return { status: 404, error: 'Dispositivo no registrado' };
+    }
+    if (!validCoordinate(body.latitude, -90, 90) || !validCoordinate(body.longitude, -180, 180)) {
+      discardedSamples++;
+      return { status: 400, error: 'Coordenadas inválidas' };
+    }
+    const timestamp = new Date(body.timestamp || Date.now());
+    if (Number.isNaN(timestamp.getTime())) {
+      discardedSamples++;
+      return { status: 400, error: 'timestamp inválido' };
+    }
+    const sampleId = String(body.sampleId || `${deviceId}-${timestamp.getTime()}-${body.latitude}-${body.longitude}`);
+    if (seenSamples.has(sampleId)) return { duplicate: true, sampleId };
+    seenSamples.add(sampleId);
+    const location = {
+      deviceId, sampleId, latitude: body.latitude, longitude: body.longitude,
+      accuracy: Number.isFinite(body.accuracy) ? body.accuracy : null,
+      speed: Number.isFinite(body.speed) ? body.speed : null,
+      heading: Number.isFinite(body.heading) ? body.heading : null,
+      battery: Number.isInteger(body.battery) ? body.battery : null,
+      timestamp: timestamp.toISOString(),
+    };
+    const receivedAt = new Date().toISOString();
+    data.locations.push({ ...location, device_id: deviceId });
+    const device = data.devices.find((item) => item.device_id === deviceId);
+    Object.assign(device, { last_seen: location.timestamp, battery: location.battery });
+    const measured = recordLatency(location, receivedAt);
+    persistSoon();
+    broadcast({ type: 'location.updated', data: measured });
+    return { location: measured };
   }
 }
 
@@ -106,28 +167,23 @@ app.post('/api/devices', (req, res) => {
 });
 
 app.post('/api/devices/:deviceId/locations', (req, res) => {
-  const deviceId = String(req.params.deviceId);
-  if (!data.devices.some((device) => device.device_id === deviceId)) return res.status(404).json({ error: 'Dispositivo no registrado' });
-  const body = req.body || {};
-  if (!validCoordinate(body.latitude, -90, 90) || !validCoordinate(body.longitude, -180, 180)) {
-    return res.status(400).json({ error: 'Coordenadas inválidas' });
-  }
-  const timestamp = new Date(body.timestamp || Date.now());
-  if (Number.isNaN(timestamp.getTime())) return res.status(400).json({ error: 'timestamp inválido' });
-  const location = {
-    deviceId, latitude: body.latitude, longitude: body.longitude,
-    accuracy: Number.isFinite(body.accuracy) ? body.accuracy : null,
-    speed: Number.isFinite(body.speed) ? body.speed : null,
-    heading: Number.isFinite(body.heading) ? body.heading : null,
-    battery: Number.isInteger(body.battery) ? body.battery : null,
-    timestamp: timestamp.toISOString(),
-  };
-  data.locations.push({ ...location, device_id: deviceId });
-  const device = data.devices.find((item) => item.device_id === deviceId);
-  Object.assign(device, { last_seen: location.timestamp, battery: location.battery });
-  saveData();
-  broadcast({ type: 'location.updated', data: location });
-  return res.status(201).json({ ok: true, location });
+  const result = acceptLocation(String(req.params.deviceId), req.body || {});
+  if (result.error) return res.status(result.status).json({ error: result.error });
+  if (result.duplicate) return res.status(200).json({ ok: true, duplicate: true, sampleId: result.sampleId });
+  return res.status(201).json({ ok: true, location: result.location });
+});
+
+app.get('/api/metrics', (_req, res) => {
+  const sorted = [...latencySamples].sort((a, b) => a - b);
+  const percentile = (ratio) => sorted.length ? sorted[Math.min(sorted.length - 1, Math.floor((sorted.length - 1) * ratio))] : null;
+  res.json({
+    samples: sorted.length,
+    averageMs: sorted.length ? sorted.reduce((sum, value) => sum + value, 0) / sorted.length : null,
+    p50Ms: percentile(0.5), p95Ms: percentile(0.95), p99Ms: percentile(0.99),
+    maxMs: sorted.at(-1) ?? null,
+    under1000Percent: sorted.length ? (sorted.filter((value) => value < 1000).length / sorted.length) * 100 : null,
+    discardedSamples,
+  });
 });
 
 app.get('/api/devices', (_req, res) => {
@@ -171,6 +227,24 @@ const websocketServer = new WebSocketServer({ server, path: '/ws' });
 websocketServer.on('connection', (socket, request) => {
   sockets.add(socket);
   socket.send(JSON.stringify({ type: 'connected' }));
+  socket.on('message', (raw) => {
+    try {
+      const message = JSON.parse(raw.toString());
+      if (message.type !== 'location' || !message.data) return;
+      const deviceId = String(message.data.deviceId || message.data.device_id || '');
+      const result = acceptLocation(deviceId, message.data);
+      if (result.error) {
+        socket.send(JSON.stringify({ type: 'location.rejected', data: { sampleId: message.data.sampleId, error: result.error } }));
+      } else {
+        socket.send(JSON.stringify({
+          type: 'location.accepted',
+          data: { sampleId: message.data.sampleId || result.sampleId, duplicate: result.duplicate === true },
+        }));
+      }
+    } catch {
+      socket.send(JSON.stringify({ type: 'error', error: 'Mensaje WebSocket inválido' }));
+    }
+  });
   socket.on('close', () => sockets.delete(socket));
 });
 

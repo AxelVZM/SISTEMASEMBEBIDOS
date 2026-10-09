@@ -108,6 +108,10 @@ El índice compuesto `deviceId + timestamp` permite recuperar el último punto y
 - `GET /api/devices/:deviceId/history?from=ISO&to=ISO`
 - `GET /api/health`
 - `WS /ws?token=JWT`
+- `GET /api/metrics` devuelve promedio, P50, P95, P99, máximo, porcentaje bajo
+  de 1000 ms y muestras descartadas desde el arranque del proceso. No es una
+  certificación de rendimiento: la prueba de campo debe ejecutarse durante al
+  menos 10 minutos y conservar sus datos.
 
 Todos los endpoints de dispositivos requieren `Authorization: Bearer JWT` y verifican que el dispositivo pertenezca al usuario autenticado.
 
@@ -127,6 +131,18 @@ Todos los endpoints de dispositivos requieren `Authorization: Bearer JWT` y veri
 12. Configurar health check en `/api/health` y alarmas de errores 4xx/5xx, CPU, memoria y desconexiones WebSocket.
 
 ## Actualizaciones y logs
+
+Generar el APK Android de release:
+
+```powershell
+flutter build apk --release --dart-define=API_URL=https://DOMINIO/movimiento/api
+```
+
+El cliente usa WebSocket como canal principal (`/movimiento/ws` detrás del
+proxy), guarda primero cada muestra en SQLite y reintenta las pendientes por
+HTTP cuando no hay conectividad. La app no puede garantizar P95 menor de un
+segundo: hay que reportar el valor real de `/api/metrics`, junto con red,
+dispositivo, duración y porcentaje de muestras válidas.
 
 ```powershell
 docker build -t movimiento-api:VERSION ./backend

@@ -6,6 +6,9 @@ class UbicacionLocal {
     required this.longitude,
     required this.timestamp,
     required this.accuracy,
+    this.speed = 0,
+    this.heading = 0,
+    this.battery,
     this.syncStatus = 'pending',
   });
 
@@ -15,6 +18,9 @@ class UbicacionLocal {
   final double longitude;
   final DateTime timestamp;
   final double accuracy;
+  final double speed;
+  final double heading;
+  final int? battery;
   final String syncStatus;
 
   Map<String, Object?> toMap() => {
@@ -24,6 +30,9 @@ class UbicacionLocal {
         'longitude': longitude,
         'timestamp': timestamp.toUtc().toIso8601String(),
         'accuracy': accuracy,
+        'speed': speed,
+        'heading': heading,
+        'battery': battery,
         'sync_status': syncStatus,
       };
 
@@ -34,6 +43,9 @@ class UbicacionLocal {
         longitude: (map['longitude'] as num).toDouble(),
         timestamp: DateTime.parse(map['timestamp'] as String).toLocal(),
         accuracy: (map['accuracy'] as num).toDouble(),
+        speed: (map['speed'] as num?)?.toDouble() ?? 0,
+        heading: (map['heading'] as num?)?.toDouble() ?? 0,
+        battery: (map['battery'] as num?)?.toInt(),
         syncStatus: map['sync_status'] as String? ?? 'pending',
       );
 }

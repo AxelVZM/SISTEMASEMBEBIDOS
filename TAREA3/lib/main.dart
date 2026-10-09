@@ -150,7 +150,7 @@ class _PantallaMovimientoState extends State<PantallaMovimiento> {
   bool _cargando = true;
   bool _pausado = false;
   String _deviceId = '';
-  int _intervaloSegundos = 5;
+  int _intervaloMilisegundos = 500;
   String? _mensaje;
 
   String get _mapTileUrl => _cartoApiKey.isEmpty
@@ -176,7 +176,7 @@ class _PantallaMovimientoState extends State<PantallaMovimiento> {
     if (!mounted) return;
     setState(() {
       _deviceId = deviceId!;
-      _intervaloSegundos = preferencias.getInt('intervalo_gps') ?? 5;
+      _intervaloMilisegundos = preferencias.getInt('intervalo_gps') ?? 500;
     });
   }
 
@@ -261,6 +261,7 @@ class _PantallaMovimientoState extends State<PantallaMovimiento> {
       );
       final puntoInicial = LatLng(posicion.latitude, posicion.longitude);
       await _registrarDispositivoLocal();
+      await _seguimientoRemoto.iniciarTiempoReal();
       _bateriaInicio = await _bateria.batteryLevel;
       setState(() {
         _puntos
@@ -284,7 +285,7 @@ class _PantallaMovimientoState extends State<PantallaMovimiento> {
         locationSettings: AndroidSettings(
           accuracy: LocationAccuracy.high,
           distanceFilter: 5,
-          intervalDuration: Duration(seconds: _intervaloSegundos),
+          intervalDuration: Duration(milliseconds: _intervaloMilisegundos),
           foregroundNotificationConfig: const ForegroundNotificationConfig(
             notificationTitle: 'Rastro está registrando tu recorrido',
             notificationText: 'La ubicación continúa activa en segundo plano',
@@ -440,8 +441,22 @@ class _PantallaMovimientoState extends State<PantallaMovimiento> {
 
   void _agregarUbicacion(Position posicion) {
     if (!mounted) return;
-    final punto = LatLng(posicion.latitude, posicion.longitude);
+    if (!posicion.latitude.isFinite ||
+        !posicion.longitude.isFinite ||
+        posicion.latitude < -90 ||
+        posicion.latitude > 90 ||
+        posicion.longitude < -180 ||
+        posicion.longitude > 180) {
+      return;
+    }
     final anterior = _ultimaPosicion;
+    if (anterior != null &&
+        anterior.latitude == posicion.latitude &&
+        anterior.longitude == posicion.longitude &&
+        anterior.timestamp == posicion.timestamp) {
+      return;
+    }
+    final punto = LatLng(posicion.latitude, posicion.longitude);
     if (anterior != null) {
       _distanciaMetros += Geolocator.distanceBetween(
         anterior.latitude,
@@ -467,13 +482,16 @@ class _PantallaMovimientoState extends State<PantallaMovimiento> {
 
   Future<void> _guardarUbicacion(Position posicion) async {
     if (_deviceId.isEmpty) return;
-    await _baseDatos.insertarUbicacion(
+    final localId = await _baseDatos.insertarUbicacion(
       UbicacionLocal(
         deviceId: _deviceId,
         latitude: posicion.latitude,
         longitude: posicion.longitude,
         timestamp: posicion.timestamp,
         accuracy: posicion.accuracy,
+        speed: posicion.speed,
+        heading: posicion.heading,
+        battery: await _bateria.batteryLevel,
       ),
     );
     unawaited(
@@ -485,6 +503,7 @@ class _PantallaMovimientoState extends State<PantallaMovimiento> {
         heading: posicion.heading,
         battery: await _bateria.batteryLevel,
         timestamp: posicion.timestamp,
+        localId: localId,
       ),
     );
   }
@@ -556,6 +575,7 @@ class _PantallaMovimientoState extends State<PantallaMovimiento> {
   void dispose() {
     _ubicacionSuscripcion?.cancel();
     _sensorSuscripcion?.cancel();
+    _seguimientoRemoto.cerrar();
     super.dispose();
   }
 
@@ -652,7 +672,7 @@ class _PantallaMovimientoState extends State<PantallaMovimiento> {
             pausado: _pausado,
             cantidadPuntos: _puntos.length,
             cantidadRecorridos: _historial.length,
-            intervaloSegundos: _intervaloSegundos,
+            intervaloMilisegundos: _intervaloMilisegundos,
             deviceId: _deviceId,
             mensaje: _mensaje,
             onPressed: _alternarRegistro,
@@ -700,7 +720,7 @@ class _PantallaMovimientoState extends State<PantallaMovimiento> {
       locationSettings: AndroidSettings(
         accuracy: LocationAccuracy.high,
         distanceFilter: 5,
-        intervalDuration: Duration(seconds: _intervaloSegundos),
+        intervalDuration: Duration(milliseconds: _intervaloMilisegundos),
         foregroundNotificationConfig: const ForegroundNotificationConfig(
           notificationTitle: 'Rastro está registrando tu recorrido',
           notificationText: 'La ubicación continúa activa en segundo plano',
@@ -717,7 +737,7 @@ class _PantallaMovimientoState extends State<PantallaMovimiento> {
   }
 
   Future<void> _mostrarConfiguracionIntervalo() async {
-    var intervalo = _intervaloSegundos;
+    var intervalo = _intervaloMilisegundos;
     final seleccionado = await showDialog<int>(
       context: context,
       builder: (context) => AlertDialog(
@@ -726,13 +746,13 @@ class _PantallaMovimientoState extends State<PantallaMovimiento> {
           builder: (context, actualizar) => DropdownButtonFormField<int>(
             initialValue: intervalo,
             decoration: const InputDecoration(
-              labelText: 'Segundos entre muestras',
+              labelText: 'Milisegundos entre muestras',
             ),
-            items: const [5, 10, 15, 30, 60]
+            items: const [500, 1000, 2000, 5000, 10000]
                 .map(
                   (valor) => DropdownMenuItem(
                     value: valor,
-                    child: Text('$valor segundos'),
+                    child: Text('$valor ms'),
                   ),
                 )
                 .toList(),
@@ -755,7 +775,7 @@ class _PantallaMovimientoState extends State<PantallaMovimiento> {
     if (seleccionado == null || !mounted) return;
     final preferencias = await SharedPreferences.getInstance();
     await preferencias.setInt('intervalo_gps', seleccionado);
-    setState(() => _intervaloSegundos = seleccionado);
+    setState(() => _intervaloMilisegundos = seleccionado);
     if (_registrando) {
       await _detenerRegistro();
       await _iniciarRegistro();
@@ -860,7 +880,7 @@ class _PanelInferior extends StatelessWidget {
     required this.pausado,
     required this.cantidadPuntos,
     required this.cantidadRecorridos,
-    required this.intervaloSegundos,
+    required this.intervaloMilisegundos,
     required this.deviceId,
     required this.mensaje,
     required this.onPressed,
@@ -871,7 +891,7 @@ class _PanelInferior extends StatelessWidget {
   final bool pausado;
   final int cantidadPuntos;
   final int cantidadRecorridos;
-  final int intervaloSegundos;
+  final int intervaloMilisegundos;
   final String deviceId;
   final String? mensaje;
   final VoidCallback onPressed;
@@ -897,7 +917,7 @@ class _PanelInferior extends StatelessWidget {
                     titulo: 'Guardados',
                     valor: '$cantidadRecorridos',
                   ),
-                  _DatoResumen(titulo: 'GPS', valor: '${intervaloSegundos}s'),
+                  _DatoResumen(titulo: 'GPS', valor: '${intervaloMilisegundos}ms'),
                 ],
               ),
               if (deviceId.isNotEmpty)
