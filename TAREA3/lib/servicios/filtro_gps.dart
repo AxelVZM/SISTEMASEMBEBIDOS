@@ -144,11 +144,18 @@ class FiltroGps {
 
       if (!hayEvidencia) return _quieto(punto, precisionValida, tiempoMs);
 
-      // 2) Caminando: cada lectura se muestra al instante (< 1 s), salvo
-      //    saltos incoherentes con lo caminado (con 2 pasos no se avanzan
-      //    12 m: eso es un salto del GPS).
+      // 2) Caminando. El GPS tiene ±3-5 m de ruido, así que un cambio menor
+      //    que su error NO es movimiento medible (Google Maps tampoco lo
+      //    dibuja). Se acepta un punto nuevo solo si:
+      //    - se alejó más que el error de la lectura (mín. 3 m), y
+      //    - los pasos dados lo explican: con 3 pasos (~2,4 m) un salto de
+      //      5 m es ruido, no un recorrido.
+      //    Mientras tanto se mantiene el último punto y los pasos se
+      //    acumulan, así que al caminar de verdad el punto avanza enseguida.
+      final umbralMovimiento = math.max(3.0, precisionValida);
+      if (distancia < umbralMovimiento) return _mantener();
       final maximo = pasos != null
-          ? pasos * longitudPaso * 1.5 + 2.0
+          ? pasos * longitudPaso * 1.25 + 0.3 * precisionValida
           : velocidadPeatonMaxima * (dtMs / 1000) + 2.0;
       if (distancia > maximo) return _mantener();
     }

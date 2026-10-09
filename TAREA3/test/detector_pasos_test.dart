@@ -69,20 +69,20 @@ void main() {
       expect(r.punto, const LatLng(-13.5, -71.9));
     });
 
-    test('6 pasos justifican ~5 m pero no 15 m', () {
+    test('8 pasos justifican ~6 m pero no 15 m', () {
       final filtro = FiltroGps();
       filtro.procesar(latitud: -13.5, longitud: -71.9, precision: 5, velocidad: 0, rumbo: 0, tiempoMs: 0);
       final lejos = filtro.procesar(
         latitud: -13.5 + 15 / 111320, longitud: -71.9,
-        precision: 5, velocidad: 0, rumbo: 0, tiempoMs: 3000, pasosDesdeUltimoPunto: 6,
+        precision: 5, velocidad: 0, rumbo: 0, tiempoMs: 3000, pasosDesdeUltimoPunto: 8,
       )!;
       expect(lejos.esNuevo, isFalse);
       final cerca = filtro.procesar(
-        latitud: -13.5 + 5 / 111320, longitud: -71.9,
-        precision: 5, velocidad: 0, rumbo: 0, tiempoMs: 4000, pasosDesdeUltimoPunto: 6,
+        latitud: -13.5 + 6 / 111320, longitud: -71.9,
+        precision: 5, velocidad: 0, rumbo: 0, tiempoMs: 4000, pasosDesdeUltimoPunto: 8,
       )!;
       expect(cerca.esNuevo, isTrue);
-      expect(cerca.punto.latitude, -13.5 + 5 / 111320);
+      expect(cerca.punto.latitude, -13.5 + 6 / 111320);
     });
 
     test('en vehículo (velocidad GNSS) se acepta sin pasos', () {

@@ -141,18 +141,35 @@ void main() {
     test('pasos coherentes se aceptan; saltos mayores que los pasos no', () {
       final filtro = FiltroGps();
       filtro.procesar(latitud: -13.5, longitud: -71.9, precision: 5, velocidad: 0, rumbo: 0, tiempoMs: 0);
-      final paso = filtro.procesar(latitud: -13.5 + 4.5 / 111320, longitud: -71.9, precision: 5, velocidad: 0, rumbo: 0, tiempoMs: 4000, pasosDesdeUltimoPunto: 6)!;
+      final paso = filtro.procesar(latitud: -13.5 + 6 / 111320, longitud: -71.9, precision: 5, velocidad: 0, rumbo: 0, tiempoMs: 4000, pasosDesdeUltimoPunto: 8)!;
       expect(paso.esNuevo, isTrue);
       final salto = filtro.procesar(latitud: -13.5 + 34.5 / 111320, longitud: -71.9, precision: 5, velocidad: 0, rumbo: 0, tiempoMs: 5000, pasosDesdeUltimoPunto: 2)!;
       expect(salto.esNuevo, isFalse);
     });
 
-    test('caminando, cada lectura se muestra al instante (< 1 s)', () {
+    test('caminando de verdad (5 pasos, 3,5 m, ±2 m) el punto avanza al instante', () {
+      final filtro = FiltroGps();
+      filtro.procesar(latitud: -13.5, longitud: -71.9, precision: 2, velocidad: 0, rumbo: 0, tiempoMs: 0);
+      final r = filtro.procesar(latitud: -13.5 + 3.5 / 111320, longitud: -71.9, precision: 2, velocidad: 0, rumbo: 0, tiempoMs: 1000, pasosDesdeUltimoPunto: 5)!;
+      expect(r.esNuevo, isTrue);
+      expect(r.punto.latitude, -13.5 + 3.5 / 111320);
+    });
+
+    test('3 pasos y el GPS salta 4-6 m (±3 m): NO dibuja movimiento', () {
+      final filtro = FiltroGps();
+      filtro.procesar(latitud: -13.5, longitud: -71.9, precision: 3, velocidad: 0, rumbo: 0, tiempoMs: 0);
+      for (final salto in [4.0, 5.0, 6.0]) {
+        final r = filtro.procesar(latitud: -13.5 + salto / 111320, longitud: -71.9, precision: 3, velocidad: 0, rumbo: 0, tiempoMs: 2000, pasosDesdeUltimoPunto: 3)!;
+        expect(r.esNuevo, isFalse, reason: 'salto de $salto m con 3 pasos');
+        expect(r.punto.latitude, -13.5);
+      }
+    });
+
+    test('un cambio menor que el error del GPS no es movimiento', () {
       final filtro = FiltroGps();
       filtro.procesar(latitud: -13.5, longitud: -71.9, precision: 5, velocidad: 0, rumbo: 0, tiempoMs: 0);
-      final r = filtro.procesar(latitud: -13.5 + 1.5 / 111320, longitud: -71.9, precision: 5, velocidad: 0, rumbo: 0, tiempoMs: 1000, pasosDesdeUltimoPunto: 2)!;
-      expect(r.esNuevo, isTrue);
-      expect(r.punto.latitude, -13.5 + 1.5 / 111320);
+      final r = filtro.procesar(latitud: -13.5 + 3 / 111320, longitud: -71.9, precision: 5, velocidad: 0, rumbo: 0, tiempoMs: 1000, pasosDesdeUltimoPunto: 4)!;
+      expect(r.esNuevo, isFalse);
     });
 
     test('quieto: el punto converge a la lectura más precisa sin saltar', () {
