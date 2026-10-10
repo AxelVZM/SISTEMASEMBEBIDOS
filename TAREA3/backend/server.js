@@ -176,6 +176,11 @@ async function acceptLocation(deviceId, body) {
     timestamp: timestamp.toISOString(),
     receivedAt: new Date(receivedMs).toISOString(),
     latencyMs,
+    // Corrección: sample_id del punto que este reemplaza (lo borra db.js).
+    replaces: typeof body.replaces === 'string' && body.replaces && body.replaces !== sampleId
+      ? body.replaces.slice(0, 200) : null,
+    // Primer punto de un tramo: el panel no lo une con el anterior.
+    segmentStart: body.segmentStart === true,
   };
 
   // 1) Tiempo real: se difunde antes de tocar la base de datos.
@@ -186,12 +191,12 @@ async function acceptLocation(deviceId, body) {
   if (!wasOnline) publishDevice(device);
   const previous = latestByDevice.get(deviceId);
   if (!previous || previous.timestamp <= location.timestamp) latestByDevice.set(deviceId, location);
-  // Corrección: el punto nuevo reemplaza al anterior también en la base.
-  if (body.correction === true && live && previous && previous.sampleId !== sampleId) {
-    db.deleteSample(previous.sampleId).catch((error) => console.error('[db] No se pudo reemplazar el punto', error.message));
+  // Versiones anteriores de la app (sin `replaces`): la corrección reemplaza
+  // al último punto recibido.
+  if (!location.replaces && body.correction === true && live && previous && previous.sampleId !== sampleId) {
+    location.replaces = previous.sampleId;
   }
-  // correction: el punto corrige la posición anterior (no es desplazamiento).
-  broadcast({ type: 'location.updated', data: { ...location, live, correction: body.correction === true, serverTime: Date.now() } });
+  broadcast({ type: 'location.updated', data: { ...location, live, correction: location.replaces !== null, serverTime: Date.now() } });
 
   // Solo las muestras en vivo cuentan para la métrica (no la cola offline).
   if (live && latencyMs < 60_000) {

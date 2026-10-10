@@ -163,6 +163,9 @@
         const color = colorFor(deviceId);
         track = {
           color, marker: null, accuracy: null, last: null, prevTime: null, hz: 0, heading: 0, visible: true,
+          // Tramos de la ruta: [[{ sampleId, latlng, dot }]]. Un tramo nuevo
+          // empieza al iniciar, pausar o perder la señal (sin línea ficticia).
+          segments: [],
           line: L.polyline([], { color, weight: 4, opacity: 0.95 }).addTo(map),
           points: L.layerGroup().addTo(map),
         };
@@ -176,16 +179,45 @@
       if (svg) svg.style.transform = `rotate(${track.heading}deg)`;
     }
 
-    // Punto de la ruta: un vértice por cada lectura real del GPS.
-    function addRoutePoint(track, loc) {
-      const point = [loc.latitude, loc.longitude];
-      track.line.addLatLng(point);
-      L.circleMarker(point, { radius: 4, color: '#000', weight: 1, fillColor: colorPrecision(loc.accuracy), fillOpacity: 1 })
-        .bindTooltip(`${new Date(loc.timestamp).toLocaleTimeString()} · ±${(loc.accuracy ?? 0).toFixed(0)} m`)
-        .addTo(track.points);
+    function redrawLine(track) {
+      track.line.setLatLngs(track.segments.map((segment) => segment.map((p) => p.latlng)));
+    }
+
+    function routeDot(loc) {
+      return L.circleMarker([loc.latitude, loc.longitude], { radius: 4, color: '#000', weight: 1, fillColor: colorPrecision(loc.accuracy), fillOpacity: 1 })
+        .bindTooltip(`${new Date(loc.timestamp).toLocaleTimeString()} · ±${(loc.accuracy ?? 0).toFixed(0)} m`);
+    }
+
+    // Busca un punto de la ruta por su sampleId.
+    function findRoutePoint(track, sampleId) {
+      for (const segment of track.segments) {
+        const index = segment.findIndex((p) => p.sampleId === sampleId);
+        if (index >= 0) return { segment, index };
+      }
+      return null;
+    }
+
+    // Punto de la ruta: un vértice por cada lectura real del GPS. Una
+    // corrección reemplaza al punto que indica; si ese punto no está (ya se
+    // borró de la base o nunca llegó) la corrección es un punto normal, igual
+    // que en PostgreSQL.
+    function addRoutePoint(track, loc, redraw = true) {
+      const point = { sampleId: loc.sampleId, latlng: L.latLng(loc.latitude, loc.longitude), dot: routeDot(loc) };
+      const found = loc.replaces ? findRoutePoint(track, loc.replaces) : null;
+      if (found) {
+        found.segment[found.index].dot.remove();
+        found.segment[found.index] = point;
+      } else if (loc.segmentStart || !track.segments.length) {
+        track.segments.push([point]);
+      } else {
+        track.segments.at(-1).push(point);
+      }
+      point.dot.addTo(track.points);
+      if (redraw) redrawLine(track);
     }
 
     function clearRoute(track) {
+      track.segments = [];
       track.line.setLatLngs([]);
       track.points.clearLayers();
     }
@@ -220,18 +252,7 @@
       }
       track.prevTime = time;
       track.last = loc;
-      if (loc.correction && track.line.getLatLngs().length) {
-        // Corrección de la posición (lectura más precisa estando quieto):
-        // se reemplaza el último punto en lugar de trazar un tramo.
-        const puntos = track.line.getLatLngs();
-        puntos[puntos.length - 1] = L.latLng(loc.latitude, loc.longitude);
-        track.line.setLatLngs(puntos);
-        const ultimoPunto = track.points.getLayers().at(-1);
-        ultimoPunto?.setLatLng([loc.latitude, loc.longitude]);
-        ultimoPunto?.setStyle({ fillColor: colorPrecision(loc.accuracy) });
-      } else {
-        addRoutePoint(track, loc);
-      }
+      addRoutePoint(track, loc);
       placeMarker(loc.deviceId, loc);
       if (state.follow && state.selected === loc.deviceId) map.panTo([loc.latitude, loc.longitude], { animate: false });
       if (state.selected === loc.deviceId) scheduleDetails();
@@ -241,7 +262,8 @@
       const track = getTrack(deviceId);
       const history = await api(`api/devices/${encodeURIComponent(deviceId)}/history?lastSession=true`);
       clearRoute(track);
-      for (const loc of history.locations) addRoutePoint(track, loc);
+      for (const loc of history.locations) addRoutePoint(track, loc, false);
+      redrawLine(track);
       const latest = history.locations.at(-1);
       if (latest) {
         track.last = latest;
@@ -284,7 +306,7 @@
       const bounds = L.latLngBounds([]);
       for (const track of state.tracks.values()) {
         if (!track.visible) continue;
-        for (const p of track.line.getLatLngs()) bounds.extend(p);
+        for (const p of track.segments.flat()) bounds.extend(p.latlng);
         if (track.marker) bounds.extend(track.marker.getLatLng());
       }
       if (bounds.isValid()) { setFollow(false); map.fitBounds(bounds.pad(0.15)); }
@@ -321,7 +343,7 @@
       $('count').textContent = `${all.filter((d) => d.online).length}/${all.length} conectados`;
       $('devices').innerHTML = visible.map((d) => {
         const track = state.tracks.get(d.deviceId);
-        const puntos = track ? track.line.getLatLngs().length : 0;
+        const puntos = track ? track.segments.flat().length : 0;
         const id = escapeHtml(d.deviceId);
         return `
         <div class="device ${state.selected === d.deviceId ? 'active' : ''} ${track && !track.visible ? 'hidden-route' : ''}" data-id="${id}" style="--c:${colorFor(d.deviceId)}">
@@ -404,7 +426,7 @@
         <div class="metric"><span>Velocidad</span><strong>${loc?.speed != null ? `${(loc.speed * 3.6).toFixed(1)} km/h` : '--'}</strong></div>
         <div class="metric"><span>Precisión</span><strong>${loc?.accuracy != null ? `± ${loc.accuracy.toFixed(1)} m` : '--'}</strong></div>
         <div class="metric"><span>Coordenadas</span><strong>${loc ? `${loc.latitude.toFixed(6)}, ${loc.longitude.toFixed(6)}` : '--'}</strong></div>
-        <div class="metric"><span>Puntos en la ruta</span><strong>${track ? track.line.getLatLngs().length : 0}</strong></div>
+        <div class="metric"><span>Puntos en la ruta</span><strong>${track ? track.segments.flat().length : 0}</strong></div>
         <div class="metric"><span>Batería</span><strong>${device.battery ?? '--'}%</strong></div>`;
     }
     setInterval(renderDetails, 1000);

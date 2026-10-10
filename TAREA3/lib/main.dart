@@ -19,9 +19,10 @@ import 'servicios/base_datos_local.dart';
 import 'servicios/detector_pasos.dart';
 import 'servicios/filtro_gps.dart';
 import 'servicios/mapas.dart';
+import 'servicios/ruta_gps.dart';
 import 'servicios/seguimiento_remoto.dart';
 
-const _versionApp = '2.3.6';
+const _versionApp = '2.4.0';
 const _canalPantalla = MethodChannel('movimiento/pantalla');
 
 /// Mantiene la pantalla encendida mientras se registra (solo Android).
@@ -169,11 +170,8 @@ class _PantallaMovimientoState extends State<PantallaMovimiento> {
   final _filtro = FiltroGps(precisionMaxima: 25);
   final _historial = <RegistroMovimiento>[];
 
-  /// Segmentos del recorrido (se abre uno nuevo al reanudar tras una pausa).
-  final _segmentos = <List<LatLng>>[];
-
-  /// Precisión (m) de cada punto de [_segmentos], para colorearlo.
-  final _precisionesRuta = <List<double>>[];
+  /// Ruta en tramos (se abre uno nuevo al pausar o al perder la señal).
+  final _ruta = RutaGps();
 
   // Valores que cambian muchas veces por segundo: se notifican sin
   // reconstruir toda la pantalla (el acelerómetro antes redibujaba el mapa
@@ -197,7 +195,6 @@ class _PantallaMovimientoState extends State<PantallaMovimiento> {
   int? _ultimoPasoMs;
   int? _ultimoSensorMs;
   int _ultimoLogMs = 0;
-  double _distanciaMetros = 0;
   double _velocidadMaximaKmh = 0;
   double _velocidadTotalKmh = 0;
   double _aceleracionTotal = 0;
@@ -215,7 +212,6 @@ class _PantallaMovimientoState extends State<PantallaMovimiento> {
   bool _cargando = true;
   bool _pausado = false;
   bool _seguir = true;
-  bool _nuevoSegmento = true;
   bool _usarServicioPrimerPlano = true;
   String _deviceId = '';
   int _intervaloMilisegundos = 500;
@@ -226,10 +222,9 @@ class _PantallaMovimientoState extends State<PantallaMovimiento> {
   /// antenas. Más consistente al aire libre; bajo techo puede no haber señal.
   bool _gpsSatelitalPuro = false;
 
-  List<LatLng> get _todosLosPuntos => [for (final s in _segmentos) ...s];
+  List<LatLng> get _todosLosPuntos => _ruta.todosLosPuntos;
 
-  int get _cantidadPuntos =>
-      _segmentos.fold(0, (total, segmento) => total + segmento.length);
+  int get _cantidadPuntos => _ruta.totalPuntos;
 
   @override
   void initState() {
@@ -370,9 +365,7 @@ class _PantallaMovimientoState extends State<PantallaMovimiento> {
     _seguimientoRemoto.bateria = _nivelBateria;
     if (!mounted) return;
     setState(() {
-      _segmentos.clear();
-      _precisionesRuta.clear();
-      _nuevoSegmento = true;
+      _ruta.limpiar();
       _registrando = true;
       _esperandoFix = true;
       _pausado = false;
@@ -382,7 +375,6 @@ class _PantallaMovimientoState extends State<PantallaMovimiento> {
       _ultimoFix = null;
       _frecuenciaHz = null;
       _contadorMuestras = 0;
-      _distanciaMetros = 0;
       _velocidadMaximaKmh = 0;
       _velocidadTotalKmh = 0;
       _aceleracionTotal = 0;
@@ -536,13 +528,23 @@ class _PantallaMovimientoState extends State<PantallaMovimiento> {
     }
     _ultimoFix = ahora;
 
-    // Edad de la lectura. Si el reloj del GPS y el del sistema no coinciden
-    // (diferencia negativa o enorme) se usa el instante de recepción. Las
-    // lecturas que Android entrega en lote conservan su hora real.
+    // Edad de la lectura (hora de captura del GPS vs. ahora). Diferencias
+    // negativas pequeñas son desajustes de reloj; una lectura de hace más de
+    // 30 s es una posición en caché y no representa dónde estoy ahora.
     var edad = ahora.difference(posicion.timestamp);
-    if (edad.isNegative || edad > const Duration(minutes: 5)) {
-      edad = Duration.zero;
+    if (edad.isNegative) edad = Duration.zero;
+    if (edad > const Duration(seconds: 30)) {
+      _registrarGps(posicion, edad, 'descartada: antigua (${edad.inSeconds} s)');
+      _telemetria.value = Telemetria(
+        velocidadKmh: 0,
+        precision: posicion.accuracy,
+        frecuenciaHz: _frecuenciaHz,
+        edadFixMs: edad.inMilliseconds,
+        senalDebil: true,
+      );
+      return;
     }
+    final capturaMs = ahora.subtract(edad).millisecondsSinceEpoch;
 
     // Los pasos caducan si se dejó de caminar: así no se acumulan y luego
     // justifican un salto del GPS estando quieto.
@@ -557,13 +559,16 @@ class _PantallaMovimientoState extends State<PantallaMovimiento> {
       precision: posicion.accuracy,
       velocidad: posicion.speed,
       rumbo: posicion.heading,
-      tiempoMs: ahora.subtract(edad).millisecondsSinceEpoch,
-      // Sin acelerómetro activo (null) el filtro usa un límite de velocidad.
+      tiempoMs: capturaMs,
+      // Velocidad Doppler: la prueba principal de movimiento.
+      precisionVelocidad: posicion.speedAccuracy,
+      // Respaldo si la lectura no trae velocidad (null: sin acelerómetro).
       pasosDesdeUltimoPunto: _sensorActivo ? _pasosDesdeUltimoPunto : null,
     );
     if (lectura != null && lectura.esNuevo) _pasosDesdeUltimoPunto = 0;
 
     if (lectura == null) {
+      _registrarGps(posicion, edad, _filtro.ultimaDecision);
       _telemetria.value = Telemetria(
         velocidadKmh: _telemetria.value.velocidadKmh,
         precision: posicion.accuracy,
@@ -583,41 +588,31 @@ class _PantallaMovimientoState extends State<PantallaMovimiento> {
       edadFixMs: edad.inMilliseconds,
     );
 
-    // Teléfono quieto: la lectura era ruido y se mantiene el último punto
-    // real. No se dibuja, no se suma distancia y no se envía.
-    if (!lectura.esNuevo) {
+    // Marca de tiempo de captura alineada con el reloj del servidor.
+    final marcaServidor = ahora
+        .subtract(edad)
+        .add(Duration(milliseconds: _seguimientoRemoto.offsetRelojMs));
+    final sampleId =
+        '$_deviceId-${marcaServidor.microsecondsSinceEpoch}-${_contadorMuestras + 1}';
+
+    // Ruta punto a punto: cada lectura real aceptada es un vértice. Las
+    // lecturas mantenidas (reposo, ruido) no cambian la ruta ni se envían.
+    final cambio = _ruta.agregar(lectura, sampleId, capturaMs);
+    _registrarGps(
+      posicion,
+      edad,
+      cambio == null
+          ? lectura.motivo
+          : '${lectura.motivo} → ${cambio.inicioTramo ? 'tramo nuevo' : cambio.reemplaza != null ? 'reemplaza' : 'punto'} $sampleId',
+    );
+    if (cambio == null) {
       if (_esperandoFix) setState(() => _esperandoFix = false);
       return;
     }
 
     _precisionActual = lectura.precision;
     if (lectura.rumbo != null) _rumbo = lectura.rumbo!;
-
-    // Ruta punto a punto: cada lectura real aceptada es un vértice.
     final primerFix = _esperandoFix;
-    if (_nuevoSegmento || _segmentos.isEmpty) {
-      _segmentos.add([punto]);
-      _precisionesRuta.add([lectura.precision]);
-      _nuevoSegmento = false;
-    } else if (lectura.esCorreccion) {
-      // Lectura mucho más precisa estando quieto: corrige el último punto
-      // (no es un desplazamiento, no se dibuja tramo ni se suma distancia).
-      _segmentos.last[_segmentos.last.length - 1] = punto;
-      _precisionesRuta.last[_precisionesRuta.last.length - 1] = lectura.precision;
-    } else {
-      final segmento = _segmentos.last;
-      final distancia = Geolocator.distanceBetween(
-        segmento.last.latitude,
-        segmento.last.longitude,
-        punto.latitude,
-        punto.longitude,
-      );
-      if (distancia >= 0.5) {
-        segmento.add(punto);
-        _precisionesRuta.last.add(lectura.precision);
-        _distanciaMetros += distancia;
-      }
-    }
     if (lectura.enMovimiento) {
       _velocidadMaximaKmh = math.max(_velocidadMaximaKmh, velocidadKmh);
       _velocidadTotalKmh += velocidadKmh;
@@ -625,7 +620,7 @@ class _PantallaMovimientoState extends State<PantallaMovimiento> {
     }
     _contadorMuestras++;
 
-    // El marcador salta exactamente a la posición del GPS (sin animación).
+    // El marcador va exactamente al punto aceptado (sin animación).
     _posicionMostrada.value = punto;
     if (_seguir) {
       _mapController.move(
@@ -635,27 +630,37 @@ class _PantallaMovimientoState extends State<PantallaMovimiento> {
     }
     setState(() => _esperandoFix = false);
 
-    // Marca de tiempo alineada con el reloj del servidor.
-    final marcaServidor = ahora
-        .subtract(edad)
-        .add(Duration(milliseconds: _seguimientoRemoto.offsetRelojMs));
+    // Se envía exactamente el cambio aplicado a la ruta local.
     unawaited(
       _guardarYEnviar(
         UbicacionLocal(
-          sampleId:
-              '$_deviceId-${marcaServidor.microsecondsSinceEpoch}-$_contadorMuestras',
+          sampleId: sampleId,
           deviceId: _deviceId,
           latitude: punto.latitude,
           longitude: punto.longitude,
           timestamp: marcaServidor,
-          accuracy: posicion.accuracy,
+          accuracy: lectura.precision,
           speed: lectura.enMovimiento ? lectura.velocidad : 0,
           heading: _rumbo,
           altitude: posicion.altitude.isFinite ? posicion.altitude : null,
           battery: _nivelBateria,
-          correccion: lectura.esCorreccion,
+          reemplaza: cambio.reemplaza,
+          inicioTramo: cambio.inicioTramo,
         ),
       ),
+    );
+  }
+
+  /// Registro de diagnóstico de cada lectura (adb logcat | findstr gps):
+  /// lectura cruda, precisión, edad, velocidad Doppler y decisión del filtro.
+  void _registrarGps(Position posicion, Duration edad, String decision) {
+    debugPrint(
+      '[gps] ${posicion.latitude.toStringAsFixed(7)},'
+      '${posicion.longitude.toStringAsFixed(7)} '
+      '±${posicion.accuracy.toStringAsFixed(1)}m '
+      'edad=${edad.inMilliseconds}ms '
+      'v=${posicion.speed.toStringAsFixed(2)}±${posicion.speedAccuracy.toStringAsFixed(2)} '
+      'pasos=$_pasosDesdeUltimoPunto | $decision',
     );
   }
 
@@ -745,7 +750,7 @@ class _PantallaMovimientoState extends State<PantallaMovimiento> {
         puntos: puntos,
         fechaInicio: fechaInicio,
         fechaFin: fechaFin,
-        distanciaMetros: _distanciaMetros,
+        distanciaMetros: _ruta.distanciaMetros,
         velocidadMaximaKmh: _velocidadMaximaKmh,
         velocidadPromedioKmh: velocidadPromedio,
         aceleracionPromedio: aceleracionPromedio,
@@ -775,7 +780,7 @@ class _PantallaMovimientoState extends State<PantallaMovimiento> {
     if (!_registrando) return;
     if (_pausado) {
       _filtro.reiniciar();
-      _nuevoSegmento = true;
+      _ruta.cortar();
       _ultimoFix = null;
       _frecuenciaHz = null;
       _suscribirSensores();
@@ -889,13 +894,13 @@ class _PantallaMovimientoState extends State<PantallaMovimiento> {
                         maxNativeZoom: _capa.zoomNativoMaximo,
                         userAgentPackageName: 'pe.edu.unsaac.movimientogps',
                       ),
-                    if (_segmentos.isNotEmpty)
+                    if (_ruta.tramos.isNotEmpty)
                       PolylineLayer(
                         polylines: [
-                          for (final segmento in _segmentos)
-                            if (segmento.length > 1)
+                          for (final tramo in _ruta.tramos)
+                            if (tramo.length > 1)
                               Polyline(
-                                points: segmento,
+                                points: [for (final p in tramo) p.punto],
                                 // Cian con borde oscuro: visible sobre
                                 // satélite y sobre mapa de calles.
                                 color: const Color(0xff00e5ff),
@@ -907,15 +912,15 @@ class _PantallaMovimientoState extends State<PantallaMovimiento> {
                       ),
                     // Un punto por cada lectura real del GPS (vértices de la
                     // ruta), coloreado según su precisión.
-                    if (_segmentos.isNotEmpty)
+                    if (_ruta.tramos.isNotEmpty)
                       CircleLayer(
                         circles: [
-                          for (var s = 0; s < _segmentos.length; s++)
-                            for (var p = 0; p < _segmentos[s].length; p++)
+                          for (final tramo in _ruta.tramos)
+                            for (final p in tramo)
                               CircleMarker(
-                                point: _segmentos[s][p],
+                                point: p.punto,
                                 radius: 4,
-                                color: _colorPrecision(_precisionesRuta[s][p]),
+                                color: _colorPrecision(p.precision),
                                 borderColor: Colors.black,
                                 borderStrokeWidth: 1.2,
                               ),
@@ -1002,7 +1007,7 @@ class _PantallaMovimientoState extends State<PantallaMovimiento> {
             registrando: _registrando,
             pausado: _pausado,
             cantidadPuntos: _cantidadPuntos,
-            distanciaMetros: _distanciaMetros,
+            distanciaMetros: _ruta.distanciaMetros,
             intervaloMilisegundos: _intervaloMilisegundos,
             telemetria: _telemetria,
             deviceId: _deviceId,

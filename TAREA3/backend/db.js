@@ -72,6 +72,12 @@ CREATE TABLE IF NOT EXISTS locations (
 );
 
 CREATE INDEX IF NOT EXISTS idx_locations_device_ts ON locations (device_id, ts);
+
+-- replaces: sample_id del punto que este corrige (se borra el corregido).
+-- segment_start: primer punto de un tramo (no se une con el anterior).
+ALTER TABLE locations ADD COLUMN IF NOT EXISTS replaces TEXT;
+ALTER TABLE locations ADD COLUMN IF NOT EXISTS segment_start BOOLEAN NOT NULL DEFAULT false;
+CREATE INDEX IF NOT EXISTS idx_locations_replaces ON locations (replaces) WHERE replaces IS NOT NULL;
 `;
 
 async function migrate() {
@@ -152,21 +158,44 @@ async function flush() {
   return flushing;
 }
 
-const LOCATION_COLUMNS = ['device_id', 'sample_id', 'latitude', 'longitude', 'accuracy', 'speed', 'heading', 'altitude', 'battery', 'ts', 'received_at', 'latency_ms'];
+const LOCATION_COLUMNS = ['device_id', 'sample_id', 'latitude', 'longitude', 'accuracy', 'speed', 'heading', 'altitude', 'battery', 'ts', 'received_at', 'latency_ms', 'replaces', 'segment_start'];
 
 async function insertLocations(rows) {
   const values = [];
   const tuples = rows.map((row, i) => {
     const base = i * LOCATION_COLUMNS.length;
     values.push(row.deviceId, row.sampleId, row.latitude, row.longitude, row.accuracy, row.speed,
-      row.heading, row.altitude, row.battery, row.timestamp, row.receivedAt, row.latencyMs);
+      row.heading, row.altitude, row.battery, row.timestamp, row.receivedAt, row.latencyMs,
+      row.replaces ?? null, row.segmentStart === true);
     return `(${LOCATION_COLUMNS.map((_, j) => `$${base + j + 1}`).join(',')})`;
   });
-  await pool.query(
-    `INSERT INTO locations (${LOCATION_COLUMNS.join(',')}) VALUES ${tuples.join(',')}
-     ON CONFLICT (sample_id) DO NOTHING`,
-    values,
-  );
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    await client.query(
+      `INSERT INTO locations (${LOCATION_COLUMNS.join(',')}) VALUES ${tuples.join(',')}
+       ON CONFLICT (sample_id) DO NOTHING`,
+      values,
+    );
+    // Correcciones: se borra el punto corregido, llegue antes o después que
+    // su corrección (cola offline, reintentos): así PostgreSQL guarda la
+    // misma ruta que muestra el celular.
+    const ids = rows.map((row) => row.sampleId);
+    const replaced = rows.map((row) => row.replaces).filter(Boolean);
+    await client.query(
+      `DELETE FROM locations t
+        WHERE t.sample_id = ANY($1::text[])
+           OR (t.sample_id = ANY($2::text[])
+               AND EXISTS (SELECT 1 FROM locations c WHERE c.replaces = t.sample_id))`,
+      [replaced, ids],
+    );
+    await client.query('COMMIT');
+  } catch (error) {
+    await client.query('ROLLBACK').catch(() => {});
+    throw error;
+  } finally {
+    client.release();
+  }
 }
 
 async function updateDevicesSeen(touches) {
@@ -266,6 +295,8 @@ function mapLocation(row) {
     timestamp: row.ts.toISOString(),
     receivedAt: row.received_at.toISOString(),
     latencyMs: row.latency_ms,
+    replaces: row.replaces ?? null,
+    segmentStart: row.segment_start === true,
   };
 }
 

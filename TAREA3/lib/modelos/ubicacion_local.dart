@@ -12,7 +12,8 @@ class UbicacionLocal {
     this.altitude,
     this.battery,
     this.syncStatus = 'pending',
-    this.correccion = false,
+    this.reemplaza,
+    this.inicioTramo = false,
   });
 
   final int? id;
@@ -28,9 +29,13 @@ class UbicacionLocal {
   final int? battery;
   final String syncStatus;
 
-  /// El punto corrige la posición anterior (no es un desplazamiento). Solo
-  /// se usa en el envío en vivo para que el panel reemplace el último punto.
-  final bool correccion;
+  /// sampleId del punto que este corrige (misma posición, más precisa): el
+  /// servidor borra ese punto y el panel lo reemplaza, en vivo o en lote.
+  final String? reemplaza;
+
+  /// Primer punto de un tramo (inicio, tras pausa o tras perder la señal):
+  /// no se une con una línea al punto anterior.
+  final bool inicioTramo;
 
   Map<String, Object?> toMap() => {
         'id': id,
@@ -45,6 +50,8 @@ class UbicacionLocal {
         'altitude': altitude,
         'battery': battery,
         'sync_status': syncStatus,
+        'replaces': reemplaza,
+        'segment_start': inicioTramo ? 1 : 0,
       };
 
   /// Formato que espera el servidor.
@@ -60,7 +67,8 @@ class UbicacionLocal {
         'battery': battery,
         'timestamp': timestamp.toUtc().toIso8601String(),
         'live': enVivo,
-        if (correccion && enVivo) 'correction': true,
+        if (reemplaza != null) 'replaces': reemplaza,
+        if (inicioTramo) 'segmentStart': true,
       };
 
   factory UbicacionLocal.fromMap(Map<String, Object?> map) {
@@ -79,6 +87,8 @@ class UbicacionLocal {
       altitude: (map['altitude'] as num?)?.toDouble(),
       battery: (map['battery'] as num?)?.toInt(),
       syncStatus: map['sync_status'] as String? ?? 'pending',
+      reemplaza: map['replaces'] as String?,
+      inicioTramo: (map['segment_start'] as num?) == 1,
     );
   }
 }

@@ -21,7 +21,7 @@ class BaseDatosLocal {
     final ruta = join(await getDatabasesPath(), 'rastro_local.db');
     final db = await openDatabase(
       ruta,
-      version: 3,
+      version: 4,
       onCreate: (db, version) async {
         await db.execute('''
           CREATE TABLE locations (
@@ -36,7 +36,9 @@ class BaseDatosLocal {
             heading REAL NOT NULL DEFAULT 0,
             altitude REAL,
             battery INTEGER,
-            sync_status TEXT NOT NULL DEFAULT 'pending'
+            sync_status TEXT NOT NULL DEFAULT 'pending',
+            replaces TEXT,
+            segment_start INTEGER NOT NULL DEFAULT 0
           )
         ''');
         await db.execute(
@@ -70,6 +72,12 @@ class BaseDatosLocal {
           );
           await db.execute(
             'CREATE INDEX IF NOT EXISTS idx_locations_sample ON locations(sample_id)',
+          );
+        }
+        if (oldVersion < 4) {
+          await db.execute('ALTER TABLE locations ADD COLUMN replaces TEXT');
+          await db.execute(
+            'ALTER TABLE locations ADD COLUMN segment_start INTEGER NOT NULL DEFAULT 0',
           );
         }
       },
