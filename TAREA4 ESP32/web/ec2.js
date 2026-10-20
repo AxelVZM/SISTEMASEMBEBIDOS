@@ -19,7 +19,7 @@
   }finally{clearTimeout(timer);}
  }
  function packet(d){
-  if(remote||demo||!connected||!['status','wifi','ble'].includes(d.kind))return;
+  if(remote||demo||!connected||!['status','wifi'].includes(d.kind))return;
   if(captureBoot!==d.b){captureBoot=d.b;queue.clear();}
   queue.set(d.kind==='status'?'status':d.kind+':'+d.slot,d);
  }

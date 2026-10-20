@@ -14,7 +14,7 @@ class PacketBuffer:
     def __init__(self):
         self.lock=threading.Lock();self.rows={};self.boot=None;self.last_status=0
     def add(self,p):
-        if not isinstance(p,dict) or p.get('kind') not in ('status','wifi','ble') or not isinstance(p.get('b'),int):return False
+        if not isinstance(p,dict) or p.get('kind') not in ('status','wifi') or not isinstance(p.get('b'),int):return False
         if p['kind']!='status' and (not isinstance(p.get('slot'),int) or not 0<=p['slot']<(96 if p['kind']=='wifi' else 32)):return False
         with self.lock:
             if self.boot!=p['b']:self.rows.clear();self.boot=p['b']
@@ -108,7 +108,7 @@ def main():
                                     if not p.get('clock') or not isinstance(epoch,(int,float)) or abs(time.time()-epoch)>5:
                                         port.write((json.dumps({'cmd':'clock_sync','epoch':int(time.time())})+'\n').encode())
                                 if time.monotonic()-last_report>=10:
-                                    print('Recibiendo · Wi-Fi:',p.get('wifi'),'· BLE:',p.get('ble'),flush=True);last_report=time.monotonic()
+                                    print('Recibiendo · Wi-Fi:',p.get('wifi'),flush=True);last_report=time.monotonic()
                         if len(raw)>12000:raw=b''
             except (serial.SerialException,OSError):
                 buffer.clear();print('USB no disponible. Reintentando conexión al ESP32...',flush=True);stop.wait(3)

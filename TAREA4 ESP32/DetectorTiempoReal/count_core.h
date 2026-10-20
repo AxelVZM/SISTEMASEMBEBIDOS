@@ -2,10 +2,11 @@
 #include "config.h"
 #include "announcements.h"
 #include "ap_capabilities.h"
+#include "wifi_fingerprint.h"
 namespace detector {
 enum Source:uint8_t {AP=1,CLIENT=2,OTHER=4};
-struct Event {uint8_t mac[6]{},channel=0,source=0;int8_t rssi=0;uint32_t time=0;char ssid[33]{};WpsInfo wps;P2pInfo p2p;ApCapabilities capabilities;};
-struct Record {Event value;float ema=0;uint32_t frames=0,last=0;bool dirty=true,logged=false,wpsConflict=false,typeConflict=false;uint8_t loggedActivity=255;};
+struct Event {uint8_t mac[6]{},channel=0,source=0;int8_t rssi=0;uint32_t time=0;char ssid[33]{};WpsInfo wps;P2pInfo p2p;ApCapabilities capabilities;WifiFingerprint fingerprint;bool probe=false;};
+struct Record {Event value;float ema=0;uint32_t frames=0,last=0,probes=0;bool dirty=true,logged=false,wpsConflict=false,typeConflict=false;uint8_t loggedActivity=255;};
 inline bool unicast(const uint8_t *m){uint8_t any=0;for(size_t i=0;i<6;i++)any|=m[i];return any&&!(m[0]&1);}
 inline bool recent(uint32_t now,uint32_t last){return uint32_t(now-last)<ACTIVE_TTL_MS;}
 inline uint8_t activity(uint32_t now,uint32_t last){auto age=uint32_t(now-last);return age<JUST_SEEN_MS?0:age<ACTIVE_TTL_MS?1:2;}
@@ -24,6 +25,7 @@ inline bool parseFrame(const uint8_t *p,size_t n,int8_t rssi,uint8_t channel,uin
  }else return false;
  e={};memcpy(e.mac,p+10,6);e.channel=channel;e.rssi=rssi;e.time=now;e.source=source;
  if((sub==8||sub==5)&&type==0)parseCapabilities(p,n,e.capabilities);
+ if(type==0&&sub==4){e.probe=true;if(!probeFingerprint(p+ies,n-ies,e.fingerprint))return false;}
  if(ies){if(!parseAnnouncements(p+ies,n-ies,e.wps,e.p2p))return false;
   if(source==AP)for(size_t at=ies;at<n;){uint8_t id=p[at],len=p[at+1];at+=2;if(id==0){for(size_t i=0;i<len;i++)e.ssid[i]=p[at+i]>=32&&p[at+i]<=126?char(p[at+i]):'?';e.ssid[len]=0;}at+=len;}
  }
@@ -33,6 +35,7 @@ inline int upsertWifi(Record *rows,size_t &count,const Event &e){
  size_t i=0;while(i<count&&memcmp(rows[i].value.mac,e.mac,6))i++;
  if(i==count){if(count<MAX_RECORDS)count++;else{size_t oldest=MAX_RECORDS;uint32_t age=0;for(size_t k=0;k<count;k++){uint32_t a=e.time-rows[k].last;if(a>=ACTIVE_TTL_MS&&(oldest==MAX_RECORDS||a>age)){oldest=k;age=a;}}if(oldest==MAX_RECORDS)return -1;i=oldest;}rows[i]={};memcpy(rows[i].value.mac,e.mac,6);}
  auto &r=rows[i];r.value.channel=e.channel;r.value.rssi=e.rssi;r.value.source|=e.source;r.value.time=e.time;r.ema=r.frames?.75f*r.ema+.25f*e.rssi:e.rssi;r.frames++;r.last=e.time;r.dirty=true;
+ if(e.probe){r.probes++;r.value.fingerprint=e.fingerprint;}
  if(e.capabilities.present)r.value.capabilities=e.capabilities;
  if(e.ssid[0])strcpy(r.value.ssid,e.ssid);
  if(e.wps.present&&!e.wps.invalid){

@@ -4,7 +4,7 @@ const html=fs.readFileSync('web/index.html','utf8');
 const script=html.split('<script>')[1].split('</script>')[0],transport=fs.readFileSync('web/ec2.js','utf8');
 const w=new Window({url:'https://example.org/esp32/'});w.document.write(html.replace(/<script[^>]*>[\s\S]*?<\/script>/g,''));
 let now=1000;const timers=[];w.setInterval=(fn,ms)=>{timers.push({fn,ms});return timers.length;};Object.defineProperty(w.performance,'now',{value:()=>now});
-const status={kind:'status',firmware:'7.2',b:1,ms:1000,ttl:60000,wifi:1,ble:0,aps:0,clients:1,wifiKnown:1,bleKnown:0,wifiCapacity:false,bleCapacity:false,wifiOmitted:0,bleOmitted:0,rxOmitted:0,bleRxOmitted:0,radio:'Wi-Fi',channel:6,wifiReady:true,bleReady:true,wifiError:'',bleError:'',storage:true,storageError:'',logBytes:100,heap:100000,minHeap:95000,oled:false,rtc:false,clock:true,epoch:Math.floor(Date.now()/1000),watchdog:true,resetReason:1};
+const status={kind:'status',firmware:'7.3',b:1,ms:1000,ttl:60000,wifi:1,ble:0,aps:0,clients:1,wifiKnown:1,bleKnown:0,wifiCapacity:false,bleCapacity:false,wifiOmitted:0,bleOmitted:0,rxOmitted:0,bleRxOmitted:0,radio:'Wi-Fi',channel:6,wifiReady:true,bleReady:true,wifiError:'',bleError:'',storage:true,storageError:'',logBytes:100,heap:100000,minHeap:95000,oled:false,rtc:false,clock:true,epoch:Math.floor(Date.now()/1000),watchdog:true,resetReason:1};
 const row={kind:'wifi',b:1,slot:0,mac:'8E:00:00:00:00:01',local:true,role:'Cliente',ssid:'',name:'iPhone',nameSource:'WPS',vendor:'No inferible',manufacturer:'',model:'',number:'',rssi:-55,channel:6,frames:5,last:900,deviceType:'phone',deviceLabel:'Telefono / celular',classLevel:'hint',classEvidence:'Nombre anunciado'};
 let calls=[],online=true;
 w.fetch=async(path,opt={})=>{
@@ -12,10 +12,15 @@ w.fetch=async(path,opt={})=>{
  const data=String(path).includes('history')?{points:[]}:String(path).includes('live')?{online,packets:[status,row]}:{ok:true};
  return {ok:true,json:async()=>data};
 };
-w.eval(transport+'\n'+script+`;window.test={acceptLine,render,read:()=>({meta,connected,netInfo}),setConnected:v=>{connected=v;},clearSession};`);
+w.eval(transport+'\n'+script+`;window.test={acceptLine,render,read:()=>({meta,connected,netInfo}),setConnected:v=>{connected=v;},clearSession,distanceValue,distanceText,visibleRows,openDetail,setCatalog:c=>{wifiCatalog=c;}};`);
 const t=w.test,$=id=>w.document.getElementById(id);
 $('ec2Token').value='test-only-token-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';$('ec2Save').click();
 t.setConnected(true);t.acceptLine(JSON.stringify(status));t.acceptLine(JSON.stringify(row));
+t.render();assert.equal($('bleCard'),null);assert.equal($('bleHealth'),null);assert.equal($('testProtocol').options.length,1);
+assert.equal(t.distanceValue({...row,rssi:-45}),1);$('distanceN').value='0';assert.equal(t.distanceValue(row),null);$('distanceN').value='2.5';
+t.openDetail('wifi:0');assert($('detailContent').textContent.includes('Distancia estimada'));
+const fpRow={...row,deviceType:'unknown',deviceLabel:'Sin determinar',classLevel:'unknown',fingerprint:'01028284',fingerprintVersion:1,fingerprintComplete:true};
+t.setCatalog({entries:[{fingerprint:fpRow.fingerprint,validated:true,devices:2,validationDevices:1,type:'phone',model:'Test only'}]});t.acceptLine(JSON.stringify(fpRow));assert.equal(t.visibleRows()[0].classLevel,'fingerprint');t.acceptLine(JSON.stringify({...fpRow,fingerprintComplete:false}));assert.equal(t.visibleRows()[0].classLevel,'unknown');t.acceptLine(JSON.stringify(row));
 await timers.find(x=>x.fn.name==='publish').fn();
 let ingest=calls.find(x=>x.path==='api/ingest');assert(ingest);let body=JSON.parse(ingest.opt.body);assert.equal(body.packets.length,2);assert(body.source_id);assert(!ingest.opt.body.includes('test-only-token'));assert(ingest.opt.headers.Authorization.startsWith('Bearer '));
 // Ignore network configuration packets; they may contain Wi-Fi configuration status.

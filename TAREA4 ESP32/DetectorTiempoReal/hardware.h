@@ -29,10 +29,10 @@ void probeHardware(){
 }
 void initializeHardware(){setenv("TZ","UTC0",1);tzset();if(LED_PIN>=0){pinMode(LED_PIN,OUTPUT);digitalWrite(LED_PIN,!LED_ACTIVE_HIGH);}Wire.begin(I2C_SDA,I2C_SCL,400000);Wire.setTimeOut(10);probeHardware();if(rtcPresent)rtcLoad();}
 void hardwareTick(uint32_t now){
- auto c=counts(now);bool fault=!radioReady||bleFailed||!fsReady;uint32_t phase=now%1500;bool on=fault?(phase<100||(phase>=200&&phase<300)||(phase>=400&&phase<500)):(c.wifiCapacity||c.bleCapacity)?(phase<100||(phase>=250&&phase<350)):phase<60;
+ auto c=counts(now);bool fault=!radioReady||!fsReady;uint32_t phase=now%1500;bool on=fault?(phase<100||(phase>=200&&phase<300)||(phase>=400&&phase<500)):(c.wifiCapacity)?(phase<100||(phase>=250&&phase<350)):phase<60;
  if(LED_PIN>=0)digitalWrite(LED_PIN,on?LED_ACTIVE_HIGH:!LED_ACTIVE_HIGH);
  if(now-probeAt>=30000){probeAt=now;probeHardware();if(rtcPresent&&!clockValid())rtcLoad();}
- if(now-hardwareAt<1000||!oledReady)return;hardwareAt=now;memset(oledBuffer,0,sizeof(oledBuffer));drawText(0,0,"SENSOR V71-60S");drawText(0,18,"WIFI");drawText(45,13,String(c.wifi),2);drawText(0,40,"BLE");drawText(45,35,String(c.ble),2);
- String footer=blePhase?"RADIO BLE":String("WIFI CANAL ")+String(channel);if(networkBusy())footer="RED - PAUSA RADIO";else if(fault)footer="REVISAR ESTADO";else if(c.wifiCapacity||c.bleCapacity)footer="TABLA AL LIMITE";else if(clockValid()&&(now/5000)%2){time_t epoch=time(nullptr);tm d{};gmtime_r(&epoch,&d);char text[20];snprintf(text,sizeof(text),"UTC %02d:%02d:%02d",d.tm_hour,d.tm_min,d.tm_sec);footer=text;}drawText(0,56,footer);
+ if(now-hardwareAt<1000||!oledReady)return;hardwareAt=now;memset(oledBuffer,0,sizeof(oledBuffer));drawText(0,0,"WIFI V73-60S");drawText(0,18,"WIFI");drawText(45,13,String(c.wifi),2);drawText(0,40,"SOLO WIFI");
+ String footer=String("WIFI CANAL ")+String(channel);if(networkBusy())footer="RED - PAUSA RADIO";else if(fault)footer="REVISAR ESTADO";else if(c.wifiCapacity)footer="TABLA AL LIMITE";else if(clockValid()&&(now/5000)%2){time_t epoch=time(nullptr);tm d{};gmtime_r(&epoch,&d);char text[20];snprintf(text,sizeof(text),"UTC %02d:%02d:%02d",d.tm_hour,d.tm_min,d.tm_sec);footer=text;}drawText(0,56,footer);
  const uint8_t window[]={0x21,0,127,0x22,0,7};if(!oledCommand(window,sizeof(window))){oledReady=false;return;}for(size_t at=0;at<1024;at+=16){uint8_t packet[17];packet[0]=0x40;memcpy(packet+1,oledBuffer+at,16);if(!i2cWrite(oledAddress,packet,sizeof(packet))){oledReady=false;break;}}
 }

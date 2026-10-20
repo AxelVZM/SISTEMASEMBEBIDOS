@@ -56,7 +56,7 @@ String buildCloudPayload(uint32_t now){
  size_t clients=0,aps=0,sentClients=0,sentAps=0;
  for(size_t i=0;i<rowCount;i++)if(recent(now,rows[i].last)){if(rows[i].value.source&AP)aps++;else if(rows[i].value.source&CLIENT)clients++;}
  String s; s.reserve(18000);
- s="{\"version\":\"7.2\",\"sensor\":"+quote(macText(ownMac))+",\"ciclo_id\":"+quote(String(bootId)+"-"+String(++networkSequence))+",\"duracion_s\":60,\"total_detectado\":"+String(clients)+",\"routers\":"+String(aps)+",\"equipos_detectados\":[";
+ s="{\"version\":\"7.3\",\"sensor\":"+quote(macText(ownMac))+",\"ciclo_id\":"+quote(String(bootId)+"-"+String(++networkSequence))+",\"duracion_s\":60,\"total_detectado\":"+String(clients)+",\"routers\":"+String(aps)+",\"equipos_detectados\":[";
  for(size_t k=0;k<rowCount&&sentClients<24;k++){auto&r=rows[ids[k]];auto&v=r.value;if(!recent(now,r.last)||(v.source&AP)||!(v.source&CLIENT))continue;
  if(sentClients++)s+=',';
  s+="{\"mac\":"+quote(macText(v.mac))+",\"rssi\":"+String(int(r.ema))+",\"rssi_ultimo\":"+String(v.rssi)+",\"canal\":"+String(v.channel)+",\"paquetes\":"+String(1)+",\"visible_s\":0,\"tipo\":\"Cliente Wi-Fi\",\"fabricante_wps\":"+quote(r.wpsConflict?"":v.wps.manufacturer)+",\"modelo_wps\":"+quote(r.wpsConflict?"":v.wps.model)+",\"nombre_anunciado\":"+quote(v.p2p.name[0]?v.p2p.name:v.wps.name)+cloudClassJson(classifyWifi(r))+"}";
@@ -65,11 +65,7 @@ String buildCloudPayload(uint32_t now){
  for(size_t k=0;k<rowCount&&sentAps<16;k++){auto&r=rows[ids[k]];auto&v=r.value;if(!recent(now,r.last)||!(v.source&AP))continue;if(sentAps++)s+=',';
  s+="{\"mac\":"+quote(macText(v.mac))+",\"rssi\":"+String(int(r.ema))+",\"canal\":"+String(v.channel)+",\"beacons\":"+String(1)+",\"ssid\":"+quote(v.ssid)+",\"fabricante_wps\":"+quote(r.wpsConflict?"":v.wps.manufacturer)+",\"modelo_wps\":"+quote(r.wpsConflict?"":v.wps.model)+",\"seguridad\":"+quote(securityText(v.capabilities))+",\"wifi\":"+String(v.capabilities.generation)+cloudClassJson(classifyWifi(r))+"}";
  }
- s+="],\"ble_detectados\":[";size_t sentBle=0,activeBle=0;
- for(size_t i=0;i<bleCount;i++){auto&r=bleRows[i];auto&v=r.value;if(!recent(now,r.last))continue;activeBle++;if(sentBle>=16)continue;if(sentBle++)s+=',';
- s+="{\"mac\":"+quote(macText(v.mac))+",\"nombre\":"+quote(v.name)+",\"rssi\":"+String(int(r.ema))+",\"tipo_direccion\":"+String(v.addressType)+",\"company_id\":"+(v.hasCompany?String(v.company):String("null"))+cloudClassJson(classifyBle(r))+"}";
- }
- s+="],\"ble_total\":"+String(activeBle)+",\"clientes_enviados\":"+String(sentClients)+",\"routers_enviados\":"+String(sentAps)+",\"ble_enviados\":"+String(sentBle)+",\"estadisticas_acumuladas\":true}";
+ s+="],\"clientes_enviados\":"+String(sentClients)+",\"routers_enviados\":"+String(sentAps)+",\"estadisticas_acumuladas\":true}";
  if(s.length()>30000)return "";return s;
 }
 void cloudWorker(void*){
@@ -81,7 +77,7 @@ void cloudWorker(void*){
 }
 void finishNetwork(uint32_t now,const String &message){
  WiFi.disconnect(false,false);networkPhase=0;networkCancel=false;networkAbortIssued=false;networkMessage=message;networkPayload="";networkTarget="";networkStatusPending=true;networkNext=now+networkSettings.intervalSeconds*1000u;
- radioReady=startWifi();nextBle=millis()+WIFI_OBSERVE_MS;
+ radioReady=startWifi();
 }
 void networkTick(uint32_t now){
  if(networkPhase==3){
@@ -103,7 +99,7 @@ void networkTick(uint32_t now){
   }else if(now-networkAt>=8000)finishNetwork(now,"Sin fecha para validar HTTPS; se conserva registro local");
   return;
  }
- if(!networkConfigured||(!networkForceTest&&!networkSettings.enabled)||blePhase||!radioReady||exporting)return;
+ if(!networkConfigured||(!networkForceTest&&!networkSettings.enabled)||!radioReady||exporting)return;
  if(!networkForceTest&&int32_t(now-networkNext)<0)return;
  networkOnlyTest=networkForceTest;networkForceTest=false;
  if(!networkOnlyTest){networkPayload=buildCloudPayload(now);if(!networkPayload.length()){networkMessage="Carga demasiado grande; se conserva registro local";networkNext=now+networkSettings.intervalSeconds*1000u;networkStatusPending=true;return;}}

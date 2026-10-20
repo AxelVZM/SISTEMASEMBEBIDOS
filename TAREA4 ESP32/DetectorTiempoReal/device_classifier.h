@@ -1,7 +1,6 @@
 #pragma once
 #include <initializer_list>
 #include "count_core.h"
-#include "ble_core.h"
 namespace detector {
 enum class DeviceKind:uint8_t {unknown,phone,laptop,computer,tablet,router,ap,network,projector,tv,display,printer,camera,audio,wearable,gaming,storage,media,peripheral,sensor};
 struct DeviceClass {DeviceKind kind=DeviceKind::unknown;const char *level="unknown",*evidence="Sin evidencia suficiente";};
@@ -15,17 +14,6 @@ inline DeviceKind primaryType(const uint8_t *t){
  case 6:return s==1?DeviceKind::ap:s==2?DeviceKind::router:DeviceKind::network;
  case 7:return s==1?DeviceKind::tv:s==3?DeviceKind::projector:DeviceKind::display;
  case 8:return DeviceKind::media;case 9:return DeviceKind::gaming;case 10:return DeviceKind::phone;case 11:return DeviceKind::audio;default:return DeviceKind::unknown;}
-}
-inline DeviceKind appearanceType(uint16_t a){
- if(a==0x0083)return DeviceKind::laptop;if(a==0x0087)return DeviceKind::tablet;
- if(a==0x0086)return DeviceKind::wearable;if(a==0x008d)return DeviceKind::network;
- if(a==0x0a01)return DeviceKind::tv;if(a==0x0a03)return DeviceKind::projector;
- unsigned c=a>>6;
- if(c==1)return DeviceKind::phone;if(c==2)return DeviceKind::computer;if(c==3||c==7)return DeviceKind::wearable;
- if(c==5||c==40)return DeviceKind::display;if(c==10||c==39)return DeviceKind::media;
- if(c==6||c==15)return DeviceKind::peripheral;
- if(c==12||c==13||c==14||c==16||c==17||c==18)return DeviceKind::sensor;
- return DeviceKind::unknown;
 }
 inline DeviceKind mergeType(DeviceKind a,DeviceKind b,bool &conflict){
  if(a==DeviceKind::unknown)return b;if(b==DeviceKind::unknown||a==b)return a;
@@ -66,12 +54,5 @@ inline DeviceClass classifyWifi(const Record&r){
  if(hint!=DeviceKind::unknown)return {hint,"hint","Palabra en nombre/modelo anunciado; puede ser falso"};
  if(v.source&AP)return {DeviceKind::ap,"role","Rol AP observado; no confirma router fisico"};
  return {};
-}
-inline DeviceClass classifyBle(const BleRecord&r){
- if(r.appearanceConflict)return {DeviceKind::unknown,"conflict","Appearance BLE contradictorio"};
- if(r.value.hasAppearance){auto k=appearanceType(r.value.appearance);if(k!=DeviceKind::unknown)return {k,"declared","Appearance BLE anunciado; no autenticado"};}
- bool conflict=false;auto k=nameHint(r.value.name,conflict);
- if(conflict)return {DeviceKind::unknown,"conflict","Nombre BLE sugiere tipos diferentes"};
- return k!=DeviceKind::unknown?DeviceClass{k,"hint","Palabra en nombre BLE; puede ser falso"}:DeviceClass{};
 }
 }

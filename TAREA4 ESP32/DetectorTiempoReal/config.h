@@ -4,7 +4,6 @@
 constexpr size_t MAX_RECORDS=96,QUEUE_LENGTH=64;
 constexpr uint32_t ACTIVE_TTL_MS=60000,JUST_SEEN_MS=10000,HOP_MS=300;
 constexpr uint8_t FIRST_CHANNEL=1,LAST_CHANNEL=11;
-constexpr uint32_t WIFI_OBSERVE_MS=10000,BLE_OBSERVE_SECONDS=2;
 constexpr int MIN_RSSI=-100;
 constexpr int LED_PIN=25; // External LED + 330 ohm resistor. -1 disables.
 constexpr bool LED_ACTIVE_HIGH=true;

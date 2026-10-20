@@ -12,7 +12,7 @@ spec=importlib.util.spec_from_file_location('bridge',ROOT/'herramientas/puente_u
 TOKEN='test-ec2-key-not-a-real-token-'+('a'*32)
 
 def status(ms=1000,boot=1):
-    return dict(kind='status',firmware='7.2',b=boot,ms=ms,ttl=60000,wifi=1,ble=1,aps=0,clients=1,wifiKnown=1,bleKnown=1,wifiCapacity=False,bleCapacity=False,wifiOmitted=0,bleOmitted=0,rxOmitted=0,bleRxOmitted=0,radio='Wi-Fi',channel=6,wifiReady=True,bleReady=True,wifiError='',bleError='',storage=True,storageError='',logBytes=100,heap=100000,minHeap=90000,oled=False,rtc=False,clock=True,epoch=1792510000,watchdog=True,resetReason=1,netPaused=False)
+    return dict(kind='status',firmware='7.3',b=boot,ms=ms,ttl=60000,wifi=1,ble=1,aps=0,clients=1,wifiKnown=1,bleKnown=1,wifiCapacity=False,bleCapacity=False,wifiOmitted=0,bleOmitted=0,rxOmitted=0,bleRxOmitted=0,radio='Wi-Fi',channel=6,wifiReady=True,bleReady=True,wifiError='',bleError='',storage=True,storageError='',logBytes=100,heap=100000,minHeap=90000,oled=False,rtc=False,clock=True,epoch=1792510000,watchdog=True,resetReason=1,netPaused=False)
 
 def wifi():
     return dict(kind='wifi',b=1,slot=0,mac='8E:E5:9B:2A:CF:4E',local=True,role='Cliente',ssid='',name='MacBook de prueba',nameSource='WPS',vendor='No inferible: MAC local',manufacturer='',model='',number='',rssi=-45,channel=6,frames=8,last=900,deviceType='laptop',deviceLabel='Laptop',classLevel='hint',classEvidence='Nombre anunciado')
@@ -27,7 +27,7 @@ class ServerTests(unittest.TestCase):
         self.app=create_app(self.config);self.client=self.app.test_client();self.auth={'Authorization':'Bearer '+TOKEN}
     def tearDown(self):self.temp.cleanup()
     def post(self,packets=None,source='test-source'):
-        return self.client.post('/api/ingest',json={'sensor_id':'esp32-principal','source_id':source,'packets':packets or [status(),wifi(),ble()]},headers=self.auth)
+        return self.client.post('/api/ingest',json={'sensor_id':'esp32-principal','source_id':source,'packets':packets or [status(),wifi()]},headers=self.auth)
     def live(self):return self.client.get('/api/live',headers=self.auth).get_json()
     def test_auth_and_static(self):
         self.assertEqual(self.client.get('/api/live').status_code,401)
@@ -37,9 +37,17 @@ class ServerTests(unittest.TestCase):
         self.assertEqual(self.client.get('/api/health').status_code,200)
     def test_firmware_flow_and_types(self):
         self.assertEqual(self.post().status_code,200)
-        d=self.live();self.assertTrue(d['online']);self.assertEqual(len(d['packets']),3)
+        d=self.live();self.assertTrue(d['online']);self.assertEqual(len(d['packets']),2)
         self.assertEqual(d['packets'][0]['wifi'],1)
-        self.assertEqual(next(p for p in d['packets'] if p['kind']=='ble')['deviceType'],'projector')
+        self.assertEqual(next(p for p in d['packets'] if p['kind']=='wifi')['deviceType'],'laptop')
+        self.assertEqual(self.post([ble()]).status_code,400)
+    def test_fingerprint_roundtrip(self):
+        row=dict(wifi(),fingerprint='01028284',fingerprintComplete=True,fingerprintVersion=1,probeFrames=12)
+        self.assertEqual(self.post([status(),row]).status_code,200)
+        received=next(p for p in self.live()['packets'] if p['kind']=='wifi')
+        for k in ('fingerprint','fingerprintComplete','fingerprintVersion','probeFrames'):self.assertEqual(received[k],row[k])
+        for bad in ('z1','123','aa'*97):self.assertEqual(self.post([dict(row,fingerprint=bad)]).status_code,400)
+        with self.client.get('/wifi_catalog.json') as response:self.assertEqual(response.get_json()['entries'],[])
     def test_missing_sensor_is_offline(self):self.assertFalse(self.live()['online'])
     def test_stale_status_not_refreshed_by_duplicates(self):
         self.post();self.now+=6;self.post();self.assertFalse(self.live()['online'])

@@ -26,8 +26,5 @@ int main(){
  std::vector<uint8_t> twice(raw,raw+12);type(raw+4,1,5);twice.insert(twice.end(),raw,raw+12);parseWps(twice.data(),twice.size(),w);assert(w.invalid);
  Record rows[MAX_RECORDS]{};size_t n=0;Event e;e.mac[0]=0x80;e.mac[5]=1;e.wps.present=true;e.wps.hasType=true;type(e.wps.deviceType,1,5);upsertWifi(rows,n,e);assert(classifyWifi(rows[0]).kind==DeviceKind::laptop);type(e.wps.deviceType,7,3);upsertWifi(rows,n,e);assert(rows[0].typeConflict&&!strcmp(classifyWifi(rows[0]).level,"conflict"));
  n=0;Event p;p.mac[0]=0x80;p.mac[5]=2;p.p2p.present=p.p2p.hasType=true;type(p.p2p.deviceType,7,3);upsertWifi(rows,n,p);assert(rows[0].value.p2p.hasType&&classifyWifi(rows[0]).kind==DeviceKind::projector);
- BleEvent b;b.mac[0]=0xc3;uint8_t adv[]={3,0x19,3,0x0a};assert(parseAdvertisement(adv,sizeof adv,b));BleRecord br[MAX_BLE_RECORDS]{};size_t nb=0;upsertBle(br,nb,b);assert(classifyBle(br[0]).kind==DeviceKind::projector);
- b.appearance=0x83;upsertBle(br,nb,b);assert(br[0].appearanceConflict&&!strcmp(classifyBle(br[0]).level,"conflict"));
- assert(appearanceType(0x83)==DeviceKind::laptop);assert(appearanceType(0x40)==DeviceKind::phone);assert(appearanceType(0x87)==DeviceKind::tablet);assert(appearanceType(0xa01)==DeviceKind::tv);assert(appearanceType(0x3c1)==DeviceKind::peripheral);
- std::cout<<"OK: WPS/P2P/BLE, celular/laptop/router/proyector/otros, nombres posibles, conflictos, SSID/OUI no usados, limites TLV.\n";
+ std::cout<<"OK: WPS/P2P, nombres, conflictos, limites TLV\n";
 }

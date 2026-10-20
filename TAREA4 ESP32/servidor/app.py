@@ -20,12 +20,12 @@ def integer(v,lo,hi):
     return isinstance(v,int) and not isinstance(v,bool) and lo<=v<=hi
 
 def validate_packet(p):
-    if not isinstance(p,dict) or p.get('kind') not in ('status','wifi','ble'):
-        raise ValueError('Solo se aceptan paquetes status/wifi/ble')
+    if not isinstance(p,dict) or p.get('kind') not in ('status','wifi'):
+        raise ValueError('Solo se aceptan paquetes status/wifi')
     if not integer(p.get('b'),0,0xffffffff): raise ValueError('Sesión inválida')
     kind=p['kind']; out={}
     if kind=='status':
-        if p.get('firmware') not in ('7.0','7.1','7.2'):raise ValueError('Versión de firmware incompatible')
+        if p.get('firmware') not in ('7.0','7.1','7.2','7.3'):raise ValueError('Versión de firmware incompatible')
         bounds={'ms':0xffffffff,'wifi':96,'ble':32,'wifiKnown':96,'bleKnown':32,'aps':96,'clients':96,'channel':11,'heap':0xffffffff,'minHeap':0xffffffff,'logBytes':0xffffffff,'wifiOmitted':0xffffffff,'bleOmitted':0xffffffff,'rxOmitted':0xffffffff,'bleRxOmitted':0xffffffff}
         for k,hi in bounds.items():
             if not integer(p.get(k),1 if k=='channel' else 0,hi):raise ValueError('Estado inválido: '+k)
@@ -56,6 +56,10 @@ def validate_packet(p):
             out[k]=v
         if kind=='wifi':
             if not isinstance(p.get('local'),bool) or not integer(p.get('channel'),1,11):raise ValueError('Canal/tipo MAC inválido')
+            fp=p.get('fingerprint','')
+            if not isinstance(fp,str) or len(fp)>192 or len(fp)%2 or (fp and not re.fullmatch('[0-9a-f]+',fp)):raise ValueError('Huella inválida')
+            if not isinstance(p.get('fingerprintComplete',False),bool) or not integer(p.get('probeFrames',0),0,0xffffffff) or p.get('fingerprintVersion',1)!=1:raise ValueError('Metadatos de huella inválidos')
+            out.update(fingerprint=fp,fingerprintComplete=p.get('fingerprintComplete',False),probeFrames=p.get('probeFrames',0),fingerprintVersion=1)
             out.update(local=p['local'],channel=p['channel'],wpsConflict=bool(p.get('wpsConflict',False)),wifiGeneration=p.get('wifiGeneration',0))
             if out['wifiGeneration'] not in (0,4,5,6):raise ValueError('Generación inválida')
         else:
@@ -119,8 +123,10 @@ def create_app(config=None):
     def page():return send_from_directory(web,'index.html')
     @app.get('/ec2.js')
     def script():return send_from_directory(web,'ec2.js')
+    @app.get('/wifi_catalog.json')
+    def catalog():return send_from_directory(web,'wifi_catalog.json')
     @app.get('/api/health')
-    def health():return jsonify(ok=True,version='ec2-1',firmware='7.2')
+    def health():return jsonify(ok=True,version='ec2-1',firmware='7.3')
     @app.post('/api/ingest')
     @auth
     def ingest():
@@ -168,7 +174,7 @@ def create_app(config=None):
         with db() as c:
             sensor=c.execute('SELECT * FROM sensors WHERE id=?',(sid,)).fetchone()
             if not sensor:return jsonify(sensor_id=sid,online=False,packets=[],server_time=now,last_seen=None)
-            packets=[json.loads(r[0]) for r in c.execute('SELECT payload FROM packets WHERE sensor=? ORDER BY kind,slot',(sid,))]
+            packets=[json.loads(r[0]) for r in c.execute("SELECT payload FROM packets WHERE sensor=? AND kind='wifi' ORDER BY kind,slot",(sid,))]
         status=json.loads(sensor['status']) if sensor['status'] else None
         return jsonify(sensor_id=sid,online=bool(status and now-sensor['status_received']<ONLINE_SECONDS),packets=([status] if status else [])+packets,server_time=now,last_seen=sensor['status_received'])
     @app.get('/api/history')
