@@ -1,0 +1,1083 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Monitoreo de emisiones Wi-Fi - ESP32 AWS</title>
+    <!-- Tailwind CSS (CDN de navegador, pensado para prototipos) -->
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+    <!-- Chart.js con versión fija -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+</head>
+<body class="bg-gray-900 text-gray-100 font-sans min-h-screen p-4 md:p-6">
+
+<div class="max-w-7xl mx-auto">
+
+    <!-- Encabezado -->
+    <header class="flex flex-col lg:flex-row lg:justify-between lg:items-center gap-4 mb-6 border-b border-gray-800 pb-4">
+        <div>
+            <h1 class="text-2xl md:text-3xl font-bold text-blue-400">Monitoreo IoT - Emisores Wi-Fi</h1>
+            <p class="text-gray-400 text-sm">Sistema pasivo ESP32 conectado a AWS Lambda y DynamoDB</p>
+            <p id="estado" class="text-gray-500 text-xs mt-1">Cargando...</p>
+        </div>
+        <div class="flex flex-wrap items-center gap-3">
+            <label class="text-sm text-gray-400" for="periodo">Periodo</label>
+            <select id="periodo" class="bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm">
+                <option value="1">Última hora</option>
+                <option value="3">Últimas 3 h</option>
+                <option value="6">Últimas 6 h</option>
+                <option value="12">Últimas 12 h</option>
+                <option value="24" selected>Últimas 24 h</option>
+                <option value="72">Últimos 3 días</option>
+                <option value="168">Últimos 7 días</option>
+            </select>
+            <button id="btn-actualizar" type="button"
+                    class="bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white px-4 py-2 rounded-lg font-medium transition cursor-pointer">
+                Actualizar
+            </button>
+        </div>
+    </header>
+
+    <!-- Avisos -->
+    <div id="error" class="hidden bg-red-900/40 border border-red-700 text-red-200 px-4 py-3 rounded-lg mb-4 text-sm"></div>
+    <div id="aviso-sensor" class="hidden bg-amber-900/30 border border-amber-700 text-amber-200 px-4 py-3 rounded-lg mb-4 text-sm"></div>
+
+    <!-- Pestañas -->
+    <nav class="flex gap-1 mb-6 border-b border-gray-800" role="tablist">
+        <button id="tab-resumen" data-pestana="resumen" role="tab" class="px-4 py-2 rounded-t-lg text-sm font-medium cursor-pointer">Resumen</button>
+        <button id="tab-equipos" data-pestana="equipos" role="tab" class="px-4 py-2 rounded-t-lg text-sm font-medium cursor-pointer">
+            Equipos <span id="tab-equipos-badge" class="ml-1 text-xs bg-gray-700 rounded-full px-2 py-0.5">0</span>
+        </button>
+        <button id="tab-routers" data-pestana="routers" role="tab" class="px-4 py-2 rounded-t-lg text-sm font-medium cursor-pointer">
+            Routers <span id="tab-routers-badge" class="ml-1 text-xs bg-gray-700 rounded-full px-2 py-0.5">0</span>
+        </button>
+        <button id="tab-calibracion" data-pestana="calibracion" role="tab" class="px-4 py-2 rounded-t-lg text-sm font-medium cursor-pointer">Distancia y calibración</button>
+    </nav>
+
+    <!-- ===================== RESUMEN ===================== -->
+    <section id="sec-resumen">
+        <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+            <div class="bg-gray-800 p-5 rounded-xl border border-gray-700">
+                <h3 class="text-gray-400 text-xs font-medium uppercase tracking-wide">MAC de clientes observadas</h3>
+                <p id="kpi-actual" class="text-3xl font-extrabold text-blue-400 mt-2 tabular-nums">--</p>
+                <p id="kpi-actual-sub" class="text-gray-500 text-xs mt-1"></p>
+            </div>
+            <div class="bg-gray-800 p-5 rounded-xl border border-gray-700">
+                <h3 class="text-gray-400 text-xs font-medium uppercase tracking-wide">Pico del periodo</h3>
+                <p id="kpi-pico" class="text-3xl font-extrabold text-amber-400 mt-2 tabular-nums">--</p>
+                <p id="kpi-pico-sub" class="text-gray-500 text-xs mt-1"></p>
+            </div>
+            <div class="bg-gray-800 p-5 rounded-xl border border-gray-700">
+                <h3 class="text-gray-400 text-xs font-medium uppercase tracking-wide">Promedio</h3>
+                <p id="kpi-promedio" class="text-3xl font-extrabold text-green-400 mt-2 tabular-nums">--</p>
+                <p id="kpi-promedio-sub" class="text-gray-500 text-xs mt-1"></p>
+            </div>
+            <div class="bg-gray-800 p-5 rounded-xl border border-gray-700">
+                <h3 class="text-gray-400 text-xs font-medium uppercase tracking-wide">Equipos distintos</h3>
+                <p id="kpi-unicos" class="text-3xl font-extrabold text-purple-400 mt-2 tabular-nums">--</p>
+                <p id="kpi-unicos-sub" class="text-gray-500 text-xs mt-1"></p>
+            </div>
+            <div class="bg-gray-800 p-5 rounded-xl border border-gray-700">
+                <h3 class="text-gray-400 text-xs font-medium uppercase tracking-wide">Cerca del sensor</h3>
+                <p id="kpi-cerca" class="text-3xl font-extrabold text-blue-400 mt-2 tabular-nums">--</p>
+                <p id="kpi-cerca-sub" class="text-gray-500 text-xs mt-1"></p>
+            </div>
+            <div class="bg-gray-800 p-5 rounded-xl border border-gray-700">
+                <h3 class="text-gray-400 text-xs font-medium uppercase tracking-wide">MAC locales</h3>
+                <p id="kpi-celulares" class="text-3xl font-extrabold text-green-400 mt-2 tabular-nums">--</p>
+                <p id="kpi-celulares-sub" class="text-gray-500 text-xs mt-1"></p>
+            </div>
+            <div class="bg-gray-800 p-5 rounded-xl border border-gray-700">
+                <h3 class="text-gray-400 text-xs font-medium uppercase tracking-wide">Permanencia media</h3>
+                <p id="kpi-permanencia" class="text-3xl font-extrabold text-purple-400 mt-2 tabular-nums">--</p>
+                <p id="kpi-permanencia-sub" class="text-gray-500 text-xs mt-1"></p>
+            </div>
+            <div class="bg-gray-800 p-5 rounded-xl border border-gray-700">
+                <h3 class="text-gray-400 text-xs font-medium uppercase tracking-wide">Routers / redes</h3>
+                <p id="kpi-routers" class="text-3xl font-extrabold text-gray-300 mt-2 tabular-nums">--</p>
+                <p id="kpi-routers-sub" class="text-gray-500 text-xs mt-1"></p>
+            </div>
+        </div>
+
+        <div class="bg-gray-800 p-5 rounded-xl border border-gray-700 mb-6">
+            <h2 class="text-lg font-bold text-gray-200">Tendencia de MAC observadas</h2>
+            <p class="text-gray-500 text-xs mb-3">Las MAC locales y universales se cuentan sobre la lista enviada (máx. 100 por ciclo). No equivalen a equipos únicos. Toca la leyenda para mostrar u ocultar series.</p>
+            <div class="relative h-72"><canvas id="g-ocupacion"></canvas></div>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <div class="bg-gray-800 p-5 rounded-xl border border-gray-700">
+                <h2 class="text-lg font-bold text-gray-200">Distancia al sensor</h2>
+                <p class="text-gray-500 text-xs mb-3">Equipos del último ciclo por zona estimada</p>
+                <div class="relative h-60"><canvas id="g-zonas"></canvas></div>
+            </div>
+            <div class="bg-gray-800 p-5 rounded-xl border border-gray-700">
+                <h2 class="text-lg font-bold text-gray-200">Tipo de equipo</h2>
+                <p class="text-gray-500 text-xs mb-3">Último ciclo, según si la MAC es aleatoria</p>
+                <div class="relative h-60"><canvas id="g-tipos"></canvas></div>
+            </div>
+            <div class="bg-gray-800 p-5 rounded-xl border border-gray-700">
+                <h2 class="text-lg font-bold text-gray-200">Observaciones por hora del día</h2>
+                <p class="text-gray-500 text-xs mb-3">Promedio de equipos en cada hora del periodo</p>
+                <div class="relative h-60"><canvas id="g-horas"></canvas></div>
+            </div>
+            <div class="bg-gray-800 p-5 rounded-xl border border-gray-700">
+                <h2 class="text-lg font-bold text-gray-200">Titulares IEEE de MAC universales</h2>
+                <p class="text-gray-500 text-xs mb-3">Según los 3 primeros bytes de la MAC (OUI). Suele indicar el chip Wi-Fi (Intel, Realtek…), no la marca de la laptop</p>
+                <div class="relative h-60"><canvas id="g-fabricantes"></canvas></div>
+            </div>
+        </div>
+    </section>
+
+    <!-- ===================== EQUIPOS ===================== -->
+    <section id="sec-equipos" class="hidden">
+        <p class="text-gray-400 text-sm mb-4">
+            Cada equipo aparece con un <strong>alias</strong> (EQ-XXXXXX) calculado en AWS: las direcciones MAC reales no salen del servidor.
+            Los celulares modernos cambian su MAC cada cierto tiempo, así que un mismo teléfono puede aparecer con varios alias.
+            <span id="nota-equipos" class="text-gray-500"></span>
+        </p>
+
+        <!-- Detalle del equipo seleccionado -->
+        <div id="detalle" class="hidden bg-gray-800 p-5 rounded-xl border border-blue-800 mb-6">
+            <div class="flex flex-wrap justify-between items-start gap-3 mb-4">
+                <div>
+                    <h2 class="text-xl font-bold"><span id="d-id" class="font-mono text-blue-400"></span>
+                        <span id="d-tipo" class="ml-2 text-sm font-normal text-gray-400"></span></h2>
+                    <p id="d-estado" class="text-sm mt-1"></p>
+                </div>
+                <div class="flex items-center gap-3">
+                    <span id="d-cargando" class="hidden text-xs text-gray-400">Cargando historial...</span>
+                    <button id="d-cerrar" type="button" class="text-gray-400 hover:text-white text-sm border border-gray-600 rounded-lg px-3 py-1 cursor-pointer">Cerrar</button>
+                </div>
+            </div>
+            <div id="d-kpis" class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-3 mb-4"></div>
+            <div class="relative h-64"><canvas id="g-detalle"></canvas></div>
+            <p class="text-gray-500 text-xs mt-2">Distancia estimada ciclo a ciclo. Los huecos son ciclos en los que el equipo no fue detectado.</p>
+        </div>
+
+        <!-- Filtros -->
+        <div class="flex flex-wrap gap-3 items-center mb-4">
+            <input id="f-busqueda" type="search" placeholder="Buscar alias o fabricante"
+                   class="bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm w-full sm:w-56">
+            <select id="f-tipo" class="bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm">
+                <option value="todos">Todos los tipos</option>
+                <option value="local">MAC locales</option>
+                <option value="universal">MAC universales</option>
+            </select>
+            <select id="f-zona" class="bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm"></select>
+            <select id="f-orden" class="bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm">
+                <option value="reciente">Vistos recientemente</option>
+                <option value="cercano">Más cercanos</option>
+                <option value="ciclos">Más tiempo presentes</option>
+                <option value="primera">Primeros en llegar</option>
+            </select>
+            <label class="flex items-center gap-2 text-sm text-gray-300">
+                <input id="f-presentes" type="checkbox" class="accent-blue-500"> Solo presentes ahora
+            </label>
+            <span id="equipos-contador" class="text-xs text-gray-500 ml-auto"></span>
+        </div>
+
+        <div class="bg-gray-800 rounded-xl border border-gray-700 overflow-hidden">
+            <div class="overflow-x-auto">
+                <table class="w-full text-left border-collapse text-sm">
+                    <thead>
+                        <tr class="border-b border-gray-700 text-gray-400 text-xs uppercase tracking-wide">
+                            <th class="py-3 px-3">Equipo</th>
+                            <th class="py-3 px-3">Tipo</th>
+                            <th class="py-3 px-3" title="Fabricante del chip Wi-Fi según la MAC">Fabricante</th>
+                            <th class="py-3 px-3">Distancia est.</th>
+                            <th class="py-3 px-3" title="Último / máximo / promedio, en dBm">RSSI últ / máx / prom</th>
+                            <th class="py-3 px-3">Ciclos (presencia)</th>
+                            <th class="py-3 px-3">Permanencia</th>
+                            <th class="py-3 px-3">Primera vez</th>
+                            <th class="py-3 px-3">Última vez</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tabla-equipos" class="divide-y divide-gray-700"></tbody>
+                </table>
+            </div>
+        </div>
+    </section>
+
+    <!-- ===================== ROUTERS ===================== -->
+    <section id="sec-routers" class="hidden">
+        <div id="routers-sin-datos" class="hidden bg-gray-800 border border-gray-700 rounded-xl p-5 mb-6 text-sm text-gray-400">
+            Aún no hay datos de routers. Sube el firmware nuevo al ESP32 y despliega la Lambda nueva; aparecerán desde el siguiente ciclo.
+        </div>
+
+        <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+            <div class="bg-gray-800 p-5 rounded-xl border border-gray-700">
+                <h3 class="text-gray-400 text-xs font-medium uppercase tracking-wide">Puntos de acceso</h3>
+                <p id="kpi-r-total" class="text-3xl font-extrabold text-blue-400 mt-2 tabular-nums">--</p>
+                <p id="kpi-r-total-sub" class="text-gray-500 text-xs mt-1"></p>
+            </div>
+            <div class="bg-gray-800 p-5 rounded-xl border border-gray-700">
+                <h3 class="text-gray-400 text-xs font-medium uppercase tracking-wide">Redes distintas</h3>
+                <p id="kpi-r-redes" class="text-3xl font-extrabold text-purple-400 mt-2 tabular-nums">--</p>
+                <p id="kpi-r-redes-sub" class="text-gray-500 text-xs mt-1"></p>
+            </div>
+            <div class="bg-gray-800 p-5 rounded-xl border border-gray-700">
+                <h3 class="text-gray-400 text-xs font-medium uppercase tracking-wide">Redes inseguras</h3>
+                <p id="kpi-r-inseguras" class="text-3xl font-extrabold text-red-400 mt-2 tabular-nums">--</p>
+                <p id="kpi-r-inseguras-sub" class="text-gray-500 text-xs mt-1"></p>
+            </div>
+            <div class="bg-gray-800 p-5 rounded-xl border border-gray-700">
+                <h3 class="text-gray-400 text-xs font-medium uppercase tracking-wide">Canal recomendado</h3>
+                <p id="kpi-r-canal" class="text-3xl font-extrabold text-green-400 mt-2 tabular-nums">--</p>
+                <p id="kpi-r-canal-sub" class="text-gray-500 text-xs mt-1"></p>
+            </div>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+            <div class="bg-gray-800 p-5 rounded-xl border border-gray-700">
+                <h2 class="text-lg font-bold text-gray-200">Ocupación de canales (2.4 GHz)</h2>
+                <p class="text-gray-500 text-xs mb-3">Puntos de acceso en cada canal. Solo 1, 6 y 11 no se solapan entre sí</p>
+                <div class="relative h-60"><canvas id="g-canales"></canvas></div>
+            </div>
+            <div class="bg-gray-800 p-5 rounded-xl border border-gray-700">
+                <h2 class="text-lg font-bold text-gray-200">Seguridad</h2>
+                <p class="text-gray-500 text-xs mb-3">Tipo de cifrado anunciado por cada punto de acceso</p>
+                <div class="relative h-60"><canvas id="g-seguridad"></canvas></div>
+            </div>
+            <div class="bg-gray-800 p-5 rounded-xl border border-gray-700">
+                <h2 class="text-lg font-bold text-gray-200">Marcas</h2>
+                <p class="text-gray-500 text-xs mb-3">Fabricante anunciado por WPS o, si no, el de la MAC</p>
+                <div class="relative h-60"><canvas id="g-marcas-routers"></canvas></div>
+            </div>
+            <div class="bg-gray-800 p-5 rounded-xl border border-gray-700">
+                <h2 class="text-lg font-bold text-gray-200">Generación Wi-Fi</h2>
+                <p class="text-gray-500 text-xs mb-3">Según las capacidades anunciadas en el beacon</p>
+                <div class="relative h-60"><canvas id="g-wifi"></canvas></div>
+            </div>
+        </div>
+
+        <div class="flex flex-wrap gap-3 items-center mb-4">
+            <input id="r-busqueda" type="search" placeholder="Buscar red, marca, modelo o MAC"
+                   class="bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm w-full sm:w-64">
+            <select id="r-seguridad" class="bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm"></select>
+            <label class="flex items-center gap-2 text-sm text-gray-300">
+                <input id="r-presentes" type="checkbox" class="accent-blue-500"> Solo presentes ahora
+            </label>
+            <span id="routers-contador" class="text-xs text-gray-500 ml-auto"></span>
+        </div>
+
+        <div class="bg-gray-800 rounded-xl border border-gray-700 overflow-hidden mb-3">
+            <div class="overflow-x-auto">
+                <table class="w-full text-left border-collapse text-sm">
+                    <thead>
+                        <tr class="border-b border-gray-700 text-gray-400 text-xs uppercase tracking-wide">
+                            <th class="py-3 px-3">Red (SSID)</th>
+                            <th class="py-3 px-3">MAC (BSSID)</th>
+                            <th class="py-3 px-3">Marca / modelo</th>
+                            <th class="py-3 px-3">Seguridad</th>
+                            <th class="py-3 px-3">Wi-Fi</th>
+                            <th class="py-3 px-3">Canal</th>
+                            <th class="py-3 px-3" title="Referencial: los routers transmiten con más potencia que un celular">Distancia ref.</th>
+                            <th class="py-3 px-3" title="Último / máximo, en dBm">RSSI últ / máx</th>
+                            <th class="py-3 px-3">Presencia</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tabla-routers" class="divide-y divide-gray-700"></tbody>
+                </table>
+            </div>
+        </div>
+        <p class="text-gray-500 text-xs">
+            Una MAC local no demuestra que el punto de acceso sea un hotspot de celular;
+            el SSID y el BSSID describen la red observada y no confirman propietario ni local físico.
+            La distancia depende de la potencia y del entorno; requiere calibración por emisor y no identifica un local físico.
+        </p>
+    </section>
+
+    <!-- ===================== CALIBRACIÓN ===================== -->
+    <section id="sec-calibracion" class="hidden">
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <div class="bg-gray-800 p-5 rounded-xl border border-gray-700">
+                <h2 class="text-lg font-bold text-gray-200 mb-2">¿Cómo se estima la distancia?</h2>
+                <p class="text-gray-400 text-sm mb-3">
+                    Con el modelo de pérdida por trayectoria logarítmica: la señal (RSSI) cae al alejarse del sensor.
+                </p>
+                <p class="font-mono text-sm bg-gray-900 rounded-lg px-3 py-2 mb-3 text-blue-300">
+                    distancia = 10 ^ ((RSSI<sub>1m</sub> − RSSI) / (10 · n))
+                </p>
+                <ul class="text-gray-400 text-sm list-disc pl-5 space-y-1 mb-4">
+                    <li><strong>RSSI a 1 m</strong>: señal medida con el equipo a un metro del ESP32.</li>
+                    <li><strong>n</strong>: qué tanto atenúa el ambiente (2 = espacio abierto, 3 = aula con gente, 3.5–4 = muchas paredes).</li>
+                    <li>Es una <strong>estimación</strong>: cuerpos, paredes y la orientación del celular cambian el RSSI. El error depende del entorno y requiere medición; no permite confirmar en qué local está.</li>
+                </ul>
+
+                <label class="block text-sm text-gray-300 mb-1" for="c-rssi1m">RSSI a 1 m: <span id="c-rssi1m-valor" class="font-mono text-blue-400"></span> dBm</label>
+                <input id="c-rssi1m" type="range" min="-70" max="-30" step="1" class="w-full accent-blue-500 mb-4">
+
+                <label class="block text-sm text-gray-300 mb-1" for="c-n">Factor del ambiente n: <span id="c-n-valor" class="font-mono text-blue-400"></span></label>
+                <input id="c-n" type="range" min="1.8" max="4.0" step="0.1" class="w-full accent-blue-500 mb-4">
+
+                <button id="c-restablecer" type="button" class="text-sm border border-gray-600 hover:border-gray-400 rounded-lg px-3 py-1 cursor-pointer">Restablecer valores</button>
+            </div>
+
+            <div class="bg-gray-800 p-5 rounded-xl border border-gray-700">
+                <h2 class="text-lg font-bold text-gray-200 mb-2">Cómo calibrar</h2>
+                <ol class="text-gray-400 text-sm list-decimal pl-5 space-y-1 mb-4">
+                    <li>Pon tu celular a 1 m del ESP32 con la pantalla de ajustes Wi-Fi abierta (así envía Probe Requests seguido).</li>
+                    <li>Espera 2 o 3 ciclos y búscalo en la pestaña Equipos (su MAC conocida; la cercanía por sí sola no confirma su identidad).</li>
+                    <li>Copia su RSSI promedio en «RSSI a 1 m».</li>
+                    <li>Aléjate a 5 m y ajusta <em>n</em> hasta que la distancia estimada marque unos 5 m.</li>
+                </ol>
+                <h3 class="text-sm font-bold text-gray-300 mb-2">Equivalencias con la calibración actual</h3>
+                <table class="w-full text-sm">
+                    <thead><tr class="text-gray-400 text-xs uppercase border-b border-gray-700">
+                        <th class="py-2 text-left">RSSI</th><th class="py-2 text-left">Distancia</th><th class="py-2 text-left">Zona</th>
+                    </tr></thead>
+                    <tbody id="c-tabla" class="divide-y divide-gray-700"></tbody>
+                </table>
+            </div>
+        </div>
+    </section>
+</div>
+
+<script>
+    // Misma URL que usa el ESP32: la Lambda responde POST (guardar) y GET (consultar)
+    const API_URL = "https://6itiwld9ah.execute-api.us-east-2.amazonaws.com/default/RecibirDatosESP32";
+    const REFRESCO_MS = 30000;
+    const MAX_HORAS_EQUIPOS = 24;      // Igual que en la Lambda
+    const CALIBRACION_INICIAL = { rssi1m: -45, n: 3.0 };
+
+    const ZONAS = [
+        { nombre: "Inmediato", max: 1,        rango: "< 1 m",  color: "#60a5fa" },
+        { nombre: "Cerca",     max: 3,        rango: "1–3 m",  color: "#34d399" },
+        { nombre: "Medio",     max: 8,        rango: "3–8 m",  color: "#fbbf24" },
+        { nombre: "Lejos",     max: Infinity, rango: "> 8 m",  color: "#9ca3af" },
+    ];
+    const COLOR = {
+        azul: "#60a5fa", verde: "#34d399", morado: "#a78bfa", ambar: "#fbbf24",
+        gris: "#9ca3af", rejilla: "#374151", fondo: "#1f2937", rojo: "#f87171",
+    };
+    const PESTANAS = ["resumen", "equipos", "routers", "calibracion"];
+
+    // Tipos de seguridad que reporta el ESP32, del menos al más seguro
+    const SEGURIDADES = [
+        { nombre: "Abierta",         color: COLOR.rojo,   insegura: true },
+        { nombre: "WEP",             color: COLOR.rojo,   insegura: true },
+        { nombre: "WPA",             color: COLOR.ambar,  insegura: true },
+        { nombre: "OWE",             color: "#5eead4" },
+        { nombre: "WPA2",            color: COLOR.azul },
+        { nombre: "WPA2-Enterprise", color: COLOR.morado },
+        { nombre: "WPA2/WPA3",       color: "#4ade80" },
+        { nombre: "WPA3",            color: COLOR.verde },
+    ];
+    const GENERACIONES = { 0: "Sin generación anunciada", 4: "Wi-Fi 4 (n)", 5: "Wi-Fi 5 (ac)", 6: "Wi-Fi 6 (ax)" };
+
+    const estado = {
+        horas: 24,
+        resumen: null,        // { registros, ultimo_ciclo }
+        equipos: null,        // { ciclos_totales, equipos, ... }
+        seleccionado: null,   // alias del equipo abierto en el detalle
+        historial: null,      // { id, historial }
+        routers: null,        // { ciclos_totales, routers, ... }
+        calib: { ...CALIBRACION_INICIAL },
+        cargando: false,
+    };
+    const graficas = {};
+
+    // ---------------- Utilidades ----------------
+    const $ = id => document.getElementById(id);
+
+    function el(tag, clases, texto) {
+        const e = document.createElement(tag);
+        if (clases) e.className = clases;
+        if (texto !== undefined) e.textContent = texto;  // textContent: nunca se interpreta HTML de los datos
+        return e;
+    }
+
+    function guardarLocal(clave, valor) {
+        try { localStorage.setItem(clave, JSON.stringify(valor)); } catch (_) {}
+    }
+    function leerLocal(clave) {
+        try { return JSON.parse(localStorage.getItem(clave)); } catch (_) { return null; }
+    }
+
+    const aFecha = s => new Date(String(s).replace(" ", "T") + "-05:00");
+    const promedio = a => a.length ? a.reduce((x, y) => x + y, 0) / a.length : 0;
+
+    // "2026-10-19 16:10:00" -> "16:10" (o "19/10 16:10" si el periodo pasa de un día)
+    function etiquetaHora(s, conFecha = estado.horas > 24) {
+        const t = String(s);
+        return conFecha ? `${t.slice(8, 10)}/${t.slice(5, 7)} ${t.slice(11, 16)}` : t.slice(11, 16);
+    }
+
+    function fmtDuracion(seg) {
+        if (seg < 60) return `${Math.round(seg)} s`;
+        const min = Math.round(seg / 60);
+        if (min < 60) return `${min} min`;
+        return `${Math.floor(min / 60)} h ${min % 60} min`;
+    }
+
+    const fmtMetros = m => m < 10 ? `${m.toFixed(1)} m` : `${Math.round(m)} m`;
+    const distancia = rssi => Math.pow(10, (estado.calib.rssi1m - rssi) / (10 * estado.calib.n));
+    const zonaDe = metros => ZONAS.find(z => metros < z.max);
+
+    // Duración real de un ciclo (captura + envío), mediana de la diferencia entre registros
+    function intervaloCiclo() {
+        const r = estado.resumen?.registros || [];
+        const difs = [];
+        for (let i = 1; i < r.length; i++) {
+            const d = (aFecha(r[i].fecha_hora) - aFecha(r[i - 1].fecha_hora)) / 1000;
+            if (d > 0 && d < 300) difs.push(d);
+        }
+        if (!difs.length) return 35;
+        difs.sort((a, b) => a - b);
+        return difs[Math.floor(difs.length / 2)];
+    }
+
+    function mostrarError(mensaje) {
+        $("error").textContent = mensaje || "";
+        $("error").classList.toggle("hidden", !mensaje);
+    }
+
+    // ---------------- Datos ----------------
+    async function api(parametros) {
+        const respuesta = await fetch(`${API_URL}?${new URLSearchParams(parametros)}`);
+        if (!respuesta.ok) throw new Error(`HTTP ${respuesta.status}`);
+        return respuesta.json();
+    }
+
+    async function cargarDatos() {
+        if (estado.cargando) return;
+        estado.cargando = true;
+        $("btn-actualizar").disabled = true;
+        try {
+            const horasEquipos = Math.min(estado.horas, MAX_HORAS_EQUIPOS);
+            const [resumen, equipos, routers] = await Promise.all([
+                api({ vista: "resumen", horas: estado.horas }),
+                api({ vista: "equipos", horas: horasEquipos }),
+                // Si falla, el resto del dashboard sigue funcionando
+                api({ vista: "routers", horas: horasEquipos }).catch(() => null),
+            ]);
+            if (!resumen || !Array.isArray(resumen.registros) || !Array.isArray(equipos?.equipos)) {
+                throw new Error("respuesta inesperada; ¿desplegaste la Lambda nueva?");
+            }
+            estado.resumen = resumen;
+            estado.equipos = equipos;
+            estado.routers = Array.isArray(routers?.routers) ? routers : null;
+            if (estado.seleccionado) await cargarHistorial(estado.seleccionado);
+
+            renderTodo();
+            mostrarError(null);
+            $("estado").textContent = "Actualizado a las " + new Date().toLocaleTimeString();
+        } catch (error) {
+            console.error("Error al obtener los datos de AWS:", error);
+            mostrarError(`No se pudieron obtener los datos de AWS (${error.message}).`);
+        } finally {
+            estado.cargando = false;
+            $("btn-actualizar").disabled = false;
+        }
+    }
+
+    async function cargarHistorial(id) {
+        const datos = await api({ vista: "equipo", id, horas: Math.min(estado.horas, MAX_HORAS_EQUIPOS) });
+        if (estado.seleccionado === id) estado.historial = datos;  // Ignorar si el usuario ya eligió otro
+    }
+
+    async function seleccionarEquipo(id) {
+        estado.seleccionado = id;
+        estado.historial = null;
+        $("detalle").classList.remove("hidden");
+        $("d-id").textContent = id;
+        $("d-cargando").classList.remove("hidden");
+        renderEquipos();
+        $("detalle").scrollIntoView({ behavior: "smooth", block: "start" });
+        try {
+            await cargarHistorial(id);
+            renderDetalle();
+        } catch (error) {
+            mostrarError(`No se pudo cargar el historial de ${id} (${error.message}).`);
+        } finally {
+            $("d-cargando").classList.add("hidden");
+        }
+    }
+
+    // ---------------- Gráficas ----------------
+    // Reutiliza la gráfica si ya existe (evita parpadeo al refrescar)
+    function dibujar(id, config) {
+        const g = graficas[id];
+        if (g) {
+            g.data = config.data;
+            g.options = config.options;
+            g.update("none");
+            return;
+        }
+        graficas[id] = new Chart($(id), config);
+    }
+
+    function opcionesBase({ leyenda = false, yTitulo = "" } = {}) {
+        return {
+            responsive: true,
+            maintainAspectRatio: false,
+            animation: false,
+            interaction: { mode: "index", intersect: false },
+            plugins: { legend: { display: leyenda, labels: { color: COLOR.gris, boxWidth: 12 } } },
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    title: { display: !!yTitulo, text: yTitulo, color: COLOR.gris },
+                    grid: { color: COLOR.rejilla },
+                    ticks: { color: COLOR.gris },
+                },
+                x: { grid: { display: false }, ticks: { color: COLOR.gris, maxTicksLimit: 10, maxRotation: 0 } },
+            },
+        };
+    }
+
+    function linea(label, data, color, relleno = false) {
+        return {
+            label, data,
+            borderColor: color,
+            backgroundColor: relleno ? color + "1a" : color,
+            borderWidth: 2, pointRadius: 0, fill: relleno, tension: 0.3,
+        };
+    }
+
+    // ---------------- Render ----------------
+    function renderTodo() {
+        renderResumen();
+        renderEquipos();
+        renderDetalle();
+        renderRouters();
+        renderCalibracion();
+    }
+
+    // Cuenta valores y devuelve los "maximo" más frecuentes: [[valor, cantidad], ...]
+    function topConteo(valores, maximo = 8) {
+        const conteo = new Map();
+        valores.forEach(v => conteo.set(v, (conteo.get(v) || 0) + 1));
+        return [...conteo.entries()].sort((a, b) => b[1] - a[1]).slice(0, maximo);
+    }
+
+    function barrasHorizontales(id, pares, color, etiqueta) {
+        const opciones = opcionesBase();
+        opciones.indexAxis = "y";
+        opciones.interaction = { mode: "nearest", axis: "y", intersect: false };
+        opciones.scales.x = { beginAtZero: true, grid: { color: COLOR.rejilla }, ticks: { color: COLOR.gris, precision: 0 } };
+        opciones.scales.y = { grid: { display: false }, ticks: { color: COLOR.gris } };
+        dibujar(id, {
+            type: "bar",
+            data: {
+                labels: pares.map(p => p[0]),
+                datasets: [{ label: etiqueta, data: pares.map(p => p[1]), backgroundColor: color, borderRadius: 3 }],
+            },
+            options: opciones,
+        });
+    }
+
+    function kpi(id, valor, sub = "") {
+        $(id).textContent = valor;
+        $(id + "-sub").textContent = sub;
+    }
+
+    function renderResumen() {
+        if (!estado.resumen) return;
+        const regs = estado.resumen.registros;
+        const ultimo = estado.resumen.ultimo_ciclo || [];
+        const equipos = estado.equipos?.equipos || [];
+        const valores = regs.map(r => r.total_detectado);
+        const horasEquipos = Math.min(estado.horas, MAX_HORAS_EQUIPOS);
+
+        // Aviso si el sensor dejó de enviar
+        const ultimoRegistro = regs.at(-1);
+        const minutosSinDatos = ultimoRegistro ? (Date.now() - aFecha(ultimoRegistro.fecha_hora)) / 60000 : 0;
+        $("aviso-sensor").classList.toggle("hidden", !(minutosSinDatos > 3));
+        if (minutosSinDatos > 3) {
+            $("aviso-sensor").textContent =
+                `El sensor no envía datos desde ${etiquetaHora(ultimoRegistro.fecha_hora, true)} (hace ${fmtDuracion(minutosSinDatos * 60)}). Los valores "actuales" son de ese momento.`;
+        }
+
+        if (regs.length) {
+            const iPico = valores.indexOf(Math.max(...valores));
+            kpi("kpi-actual", `≈ ${valores.at(-1)}`, `ciclo de las ${ultimoRegistro.fecha_hora.slice(11, 16)}`);
+            kpi("kpi-pico", `${valores[iPico]}`, `a las ${etiquetaHora(regs[iPico].fecha_hora, true)}`);
+            kpi("kpi-promedio", `≈ ${Math.round(promedio(valores))}`, `${regs.length} ciclos en el periodo`);
+        } else {
+            kpi("kpi-actual", "--", "sin registros en el periodo");
+            kpi("kpi-pico", "--");
+            kpi("kpi-promedio", "--");
+        }
+
+        kpi("kpi-unicos", `${equipos.length}`, `MAC distintas en ${horasEquipos} h`);
+
+        const cerca = ultimo.filter(e => distancia(e.rssi) < 3).length;
+        kpi("kpi-cerca", `${cerca}`, "modelo RSSI < 3 m; sin ubicación confirmada");
+
+        const celulares = ultimo.filter(e => e.tipo === "local").length;
+        kpi("kpi-celulares", ultimo.length ? `${Math.round(100 * celulares / ultimo.length)} %` : "--",
+            `${celulares} de ${ultimo.length} en el último ciclo`);
+
+        kpi("kpi-permanencia",
+            equipos.length ? fmtDuracion(promedio(equipos.map(e => e.ciclos)) * intervaloCiclo()) : "--",
+            "observación por MAC; no permanencia física");
+
+        kpi("kpi-routers", ultimoRegistro ? `${ultimoRegistro.routers}` : "--", "puntos de acceso en el último ciclo");
+
+        // Tendencia
+        dibujar("g-ocupacion", {
+            type: "line",
+            data: {
+                labels: regs.map(r => etiquetaHora(r.fecha_hora)),
+                datasets: [
+                    linea("Clientes detectados", valores, COLOR.azul, true),
+                    linea("MAC locales", regs.map(r => r.celulares), COLOR.verde),
+                    linea("MAC universales", regs.map(r => r.fijos), COLOR.morado),
+                    { ...linea("Routers", regs.map(r => r.routers), COLOR.gris), borderDash: [4, 4], hidden: true },
+                ],
+            },
+            options: opcionesBase({ leyenda: true }),
+        });
+
+        // Zonas de distancia (último ciclo)
+        const conteoZonas = ZONAS.map(() => 0);
+        ultimo.forEach(e => conteoZonas[ZONAS.indexOf(zonaDe(distancia(e.rssi)))]++);
+        const opcionesZonas = opcionesBase();
+        opcionesZonas.interaction = { mode: "nearest", intersect: true };
+        dibujar("g-zonas", {
+            type: "bar",
+            data: {
+                labels: ZONAS.map(z => [z.nombre, z.rango]),
+                datasets: [{ label: "Equipos", data: conteoZonas, backgroundColor: ZONAS.map(z => z.color), borderRadius: 4 }],
+            },
+            options: opcionesZonas,
+        });
+
+        // Tipos (último ciclo)
+        dibujar("g-tipos", {
+            type: "doughnut",
+            data: {
+                labels: ["MAC local", "MAC universal"],
+                datasets: [{
+                    data: [celulares, ultimo.length - celulares],
+                    backgroundColor: [COLOR.verde, COLOR.morado],
+                    borderColor: COLOR.fondo, borderWidth: 2,
+                }],
+            },
+            options: {
+                responsive: true, maintainAspectRatio: false, animation: false, cutout: "60%",
+                plugins: { legend: { position: "bottom", labels: { color: COLOR.gris } } },
+            },
+        });
+
+        // Promedio por hora del día
+        const porHora = Array.from({ length: 24 }, () => []);
+        regs.forEach(r => porHora[parseInt(r.fecha_hora.slice(11, 13), 10)].push(r.total_detectado));
+        dibujar("g-horas", {
+            type: "bar",
+            data: {
+                labels: porHora.map((_, h) => String(h).padStart(2, "0")),
+                datasets: [{
+                    label: "Promedio de equipos",
+                    data: porHora.map(v => v.length ? Math.round(promedio(v) * 10) / 10 : null),
+                    backgroundColor: COLOR.azul, borderRadius: 3,
+                }],
+            },
+            options: opcionesBase(),
+        });
+
+        // Fabricantes (solo MAC de fábrica: las aleatorias no tienen fabricante)
+        const conFabricante = equipos.filter(e => e.fabricante && e.fabricante !== "Desconocido");
+        barrasHorizontales("g-fabricantes", topConteo(conFabricante.map(e => e.fabricante)), COLOR.morado, "Equipos");
+    }
+
+    const textoFabricante = e => [e.fabricante_wps ? `Fabricante anunciado: ${e.fabricante_wps}` : (e.fabricante ? `Titular IEEE: ${e.fabricante}` : "Sin determinar"), e.modelo_wps ? `Modelo anunciado: ${e.modelo_wps}` : ""].filter(Boolean).join(" · ");
+
+    function celdaDistancia(metros) {
+        const td = el("td", "py-2 px-3 whitespace-nowrap tabular-nums");
+        const zona = zonaDe(metros);
+        const etiqueta = el("span", "ml-2 text-xs rounded-full px-2 py-0.5", zona.nombre);
+        etiqueta.style.backgroundColor = zona.color + "33";
+        etiqueta.style.color = zona.color;
+        td.append(el("span", "", fmtMetros(metros)), etiqueta);
+        return td;
+    }
+
+    function renderEquipos() {
+        const datos = estado.equipos;
+        if (!datos) return;
+        const horasEquipos = Math.min(estado.horas, MAX_HORAS_EQUIPOS);
+        $("nota-equipos").textContent = estado.horas > MAX_HORAS_EQUIPOS
+            ? `Se muestran las últimas ${MAX_HORAS_EQUIPOS} h (máximo para el detalle por equipo).`
+            : `Periodo: últimas ${horasEquipos} h.`;
+
+        const presentes = datos.equipos.filter(e => e.presente).length;
+        $("tab-equipos-badge").textContent = presentes;
+        $("tab-equipos-badge").title = `${presentes} presentes ahora`;
+
+        const totalCiclos = datos.ciclos_totales || 1;
+        const intervalo = intervaloCiclo();
+        const busqueda = $("f-busqueda").value.trim().toUpperCase();
+        const tipo = $("f-tipo").value;
+        const zona = $("f-zona").value;
+        const soloPresentes = $("f-presentes").checked;
+
+        const ordenes = {
+            reciente: (a, b) => b.ultima_vez.localeCompare(a.ultima_vez) || b.ciclos - a.ciclos,
+            cercano: (a, b) => a.metros - b.metros,
+            ciclos: (a, b) => b.ciclos - a.ciclos,
+            primera: (a, b) => a.primera_vez.localeCompare(b.primera_vez),
+        };
+        const lista = datos.equipos
+            .map(e => ({ ...e, metros: distancia(e.rssi_ultimo) }))
+            .filter(e => (!busqueda || e.id.includes(busqueda) || (e.fabricante || "").toUpperCase().includes(busqueda))
+                && (tipo === "todos" || e.tipo === tipo)
+                && (zona === "todas" || zonaDe(e.metros).nombre === zona)
+                && (!soloPresentes || e.presente))
+            .sort(ordenes[$("f-orden").value]);
+
+        $("equipos-contador").textContent =
+            `${lista.length} de ${datos.equipos.length} equipos · ${datos.ciclos_totales} ciclos analizados`;
+
+        const tbody = $("tabla-equipos");
+        tbody.replaceChildren();
+        if (!lista.length) {
+            const fila = el("tr");
+            const td = el("td", "py-4 px-3 text-gray-500", "Ningún equipo coincide con los filtros.");
+            td.colSpan = 9;
+            fila.append(td);
+            tbody.append(fila);
+            return;
+        }
+
+        lista.slice(0, 300).forEach(e => {
+            const fila = el("tr", "hover:bg-gray-700/50 cursor-pointer transition"
+                + (e.id === estado.seleccionado ? " bg-gray-700/60" : ""));
+            fila.addEventListener("click", () => seleccionarEquipo(e.id));
+
+            const tdId = el("td", "py-2 px-3 font-mono text-xs whitespace-nowrap");
+            const punto = el("span", "inline-block w-2 h-2 rounded-full mr-2 align-middle "
+                + (e.presente ? "bg-green-400" : "bg-gray-600"));
+            punto.title = e.presente ? "Presente en el último ciclo" : "Ausente en el último ciclo";
+            tdId.append(punto, el("span", "", e.id));
+
+            fila.append(
+                tdId,
+                el("td", "py-2 px-3", (e.deviceLabel||"Sin determinar") + (e.classLevel==="hint"?" (posible)":e.classLevel==="declared"?" (anunciado)":"")),
+                el("td", "py-2 px-3 " + (e.fabricante ? "" : "text-gray-500"), textoFabricante(e)),
+                celdaDistancia(e.metros),
+                el("td", "py-2 px-3 tabular-nums whitespace-nowrap", `${e.rssi_ultimo} / ${e.rssi_max} / ${e.rssi_prom}`),
+                el("td", "py-2 px-3 tabular-nums", `${e.ciclos} (${Math.round(100 * e.ciclos / totalCiclos)} %)`),
+                el("td", "py-2 px-3 tabular-nums whitespace-nowrap", fmtDuracion(e.ciclos * intervalo)),
+                el("td", "py-2 px-3 text-gray-400 tabular-nums whitespace-nowrap", etiquetaHora(e.primera_vez, true)),
+                el("td", "py-2 px-3 text-gray-400 tabular-nums whitespace-nowrap", etiquetaHora(e.ultima_vez, true)),
+            );
+            tbody.append(fila);
+        });
+    }
+
+    // Compara la distancia de los últimos ciclos detectados
+    function tendencia(puntos) {
+        if (puntos.length && puntos.at(-1).rssi === null) return "Ausente";
+        const ultimos = puntos.filter(p => p.rssi !== null).slice(-6).map(p => distancia(p.rssi));
+        if (ultimos.length < 4) return "Pocos datos";
+        const mitad = Math.floor(ultimos.length / 2);
+        const antes = promedio(ultimos.slice(0, mitad));
+        const despues = promedio(ultimos.slice(mitad));
+        const cambio = (despues - antes) / antes;
+        if (cambio < -0.2) return "Acercándose";
+        if (cambio > 0.2) return "Alejándose";
+        return "Estable";
+    }
+
+    function renderDetalle() {
+        if (!estado.seleccionado) {
+            $("detalle").classList.add("hidden");
+            return;
+        }
+        const eq = estado.equipos?.equipos.find(e => e.id === estado.seleccionado);
+        if (!estado.historial || !eq) return;
+
+        const puntos = estado.historial.historial;
+        const vistos = puntos.filter(p => p.rssi !== null);
+        const metros = vistos.map(p => distancia(p.rssi));
+
+        $("d-id").textContent = eq.id;
+        $("d-tipo").textContent = eq.tipo === "local"
+            ? "MAC local: no revela fabricante por IEEE"
+            : `MAC universal · titular IEEE: ${eq.fabricante || "Desconocido"}`;
+        $("d-estado").textContent = eq.presente
+            ? "● Presente en el último ciclo"
+            : `○ Visto por última vez: ${etiquetaHora(eq.ultima_vez, true)}`;
+        $("d-estado").className = "text-sm mt-1 " + (eq.presente ? "text-green-400" : "text-gray-400");
+
+        const datos = [
+            ["Distancia actual", eq.presente ? fmtMetros(distancia(eq.rssi_ultimo)) : "—"],
+            ["Más cercano", fmtMetros(distancia(eq.rssi_max))],
+            ["Distancia media", metros.length ? fmtMetros(promedio(metros)) : "—"],
+            ["Tendencia", tendencia(puntos)],
+            ["Presencia", puntos.length ? `${Math.round(100 * vistos.length / puntos.length)} %` : "—"],
+            ["Permanencia", fmtDuracion(vistos.length * intervaloCiclo())],
+            ["Llegó", etiquetaHora(eq.primera_vez, true)],
+            ["Reportes con observación / canal", `${eq.paquetes} / ${eq.canal}`],
+        ];
+        $("d-kpis").replaceChildren(...datos.map(([titulo, valor]) => {
+            const caja = el("div", "bg-gray-900 rounded-lg p-3");
+            caja.append(el("p", "text-gray-500 text-xs", titulo), el("p", "text-lg font-bold tabular-nums mt-1", valor));
+            return caja;
+        }));
+
+        const opciones = opcionesBase({ yTitulo: "metros (estimado)" });
+        opciones.plugins.tooltip = {
+            callbacks: {
+                label: ctx => ctx.raw === null ? "No detectado" : `Distancia: ${fmtMetros(ctx.raw)}`,
+                afterLabel: ctx => {
+                    const p = puntos[ctx.dataIndex];
+                    return p.rssi === null ? "" : `RSSI ${p.rssi} dBm · canal ${p.canal ?? "-"} · ${p.paquetes ?? 1} reporte(s)`;
+                },
+            },
+        };
+        dibujar("g-detalle", {
+            type: "line",
+            data: {
+                labels: puntos.map(p => etiquetaHora(p.fecha_hora)),
+                datasets: [{
+                    ...linea("Distancia", puntos.map(p => p.rssi === null ? null : distancia(p.rssi)), COLOR.azul, true),
+                    pointRadius: 2, spanGaps: false,
+                }],
+            },
+            options: opciones,
+        });
+    }
+
+    // ---------------- Routers ----------------
+    const marcaRouter = r => r.hotspot ? "AP con MAC local" : (r.fabricante_wps || r.fabricante || "Desconocido");
+    const seguridadDe = nombre => SEGURIDADES.find(s => s.nombre === nombre) || { nombre, color: COLOR.gris };
+
+    // Entre 1, 6 y 11, el canal con menos interferencia: cada AP presente estorba
+    // a los canales a menos de 5 de distancia, y más cuanto más cerca está
+    function canalRecomendado(presentes) {
+        const carga = c => presentes.reduce((suma, r) => {
+            const d = Math.abs(r.canal - c);
+            return d < 5 ? suma + (5 - d) / 5 : suma;
+        }, 0);
+        return [1, 6, 11].map(c => [c, carga(c)]).sort((a, b) => a[1] - b[1])[0];
+    }
+
+    function renderRouters() {
+        const datos = estado.routers;
+        const lista = datos?.routers || [];
+        const presentes = lista.filter(r => r.presente);
+        // Si en el último ciclo no hay routers, las gráficas usan todos los vistos en el periodo
+        const base = presentes.length ? presentes : lista;
+        $("routers-sin-datos").textContent = !lista.length
+            ? "Aún no hay datos de routers. Sube el firmware nuevo al ESP32 y despliega la Lambda nueva; aparecerán desde el siguiente ciclo."
+            : "El último ciclo no trae routers: las gráficas muestran todos los vistos en el periodo.";
+        $("routers-sin-datos").classList.toggle("hidden", presentes.length > 0);
+        if (!datos) return;
+        $("tab-routers-badge").textContent = presentes.length;
+        $("tab-routers-badge").title = `${presentes.length} presentes ahora`;
+
+        // KPIs
+        kpi("kpi-r-total", `${presentes.length}`, `${lista.length} vistos en ${Math.min(estado.horas, MAX_HORAS_EQUIPOS)} h`);
+        const redes = new Set(presentes.filter(r => r.ssid).map(r => r.ssid));
+        const ocultas = presentes.filter(r => r.oculta && !r.hotspot).length;
+        const hotspots = presentes.filter(r => r.hotspot).length;
+        kpi("kpi-r-redes", `${redes.size}`, `${ocultas} ocultas · ${hotspots} hotspots personales`);
+        const inseguras = presentes.filter(r => seguridadDe(r.seguridad).insegura).length;
+        kpi("kpi-r-inseguras", `${inseguras}`, "abiertas, WEP o WPA (presentes ahora)");
+        if (presentes.length) {
+            const [canal, carga] = canalRecomendado(presentes);
+            kpi("kpi-r-canal", `${canal}`, `menor interferencia (≈ ${carga.toFixed(1)} AP solapados)`);
+        } else {
+            kpi("kpi-r-canal", "--", "sin routers presentes");
+        }
+
+        // Canales
+        const porCanal = Array.from({ length: 13 }, () => 0);
+        base.forEach(r => { if (r.canal >= 1 && r.canal <= 13) porCanal[r.canal - 1]++; });
+        dibujar("g-canales", {
+            type: "bar",
+            data: {
+                labels: porCanal.map((_, i) => String(i + 1)),
+                datasets: [{
+                    label: "Puntos de acceso", data: porCanal, borderRadius: 3,
+                    backgroundColor: porCanal.map((_, i) => [0, 5, 10].includes(i) ? COLOR.azul : COLOR.gris),
+                }],
+            },
+            options: opcionesBase(),
+        });
+
+        // Seguridad
+        const seguridad = topConteo(base.map(r => r.seguridad), 10);
+        dibujar("g-seguridad", {
+            type: "doughnut",
+            data: {
+                labels: seguridad.map(s => s[0]),
+                datasets: [{
+                    data: seguridad.map(s => s[1]),
+                    backgroundColor: seguridad.map(s => seguridadDe(s[0]).color),
+                    borderColor: COLOR.fondo, borderWidth: 2,
+                }],
+            },
+            options: {
+                responsive: true, maintainAspectRatio: false, animation: false, cutout: "60%",
+                plugins: { legend: { position: "right", labels: { color: COLOR.gris } } },
+            },
+        });
+
+        // Marcas y generación Wi-Fi
+        barrasHorizontales("g-marcas-routers",
+            topConteo(base.filter(r => !r.hotspot).map(marcaRouter)), COLOR.azul, "Puntos de acceso");
+        const generaciones = [0, 4, 5, 6].map(g => [GENERACIONES[g], base.filter(r => (r.wifi || 0) === g).length]);
+        dibujar("g-wifi", {
+            type: "bar",
+            data: {
+                labels: generaciones.map(g => g[0]),
+                datasets: [{ label: "Puntos de acceso", data: generaciones.map(g => g[1]), backgroundColor: COLOR.verde, borderRadius: 3 }],
+            },
+            options: opcionesBase(),
+        });
+
+        // Tabla
+        const busqueda = $("r-busqueda").value.trim().toUpperCase();
+        const filtroSeguridad = $("r-seguridad").value;
+        const soloPresentes = $("r-presentes").checked;
+        const filtrados = lista.filter(r =>
+            (!busqueda || [r.ssid, r.mac, marcaRouter(r), r.modelo_wps].some(t => (t || "").toUpperCase().includes(busqueda)))
+            && (filtroSeguridad === "todas"
+                || (filtroSeguridad === "inseguras" ? seguridadDe(r.seguridad).insegura : r.seguridad === filtroSeguridad))
+            && (!soloPresentes || r.presente));
+        $("routers-contador").textContent = `${filtrados.length} de ${lista.length} puntos de acceso`;
+
+        const totalCiclos = datos.ciclos_totales || 1;
+        const tbody = $("tabla-routers");
+        tbody.replaceChildren();
+        if (!filtrados.length) {
+            const fila = el("tr");
+            const td = el("td", "py-4 px-3 text-gray-500", "Ningún punto de acceso coincide con los filtros.");
+            td.colSpan = 9;
+            fila.append(td);
+            tbody.append(fila);
+            return;
+        }
+
+        filtrados.slice(0, 300).forEach(r => {
+            const fila = el("tr", "hover:bg-gray-700/50 transition");
+
+            const tdRed = el("td", "py-2 px-3 whitespace-nowrap");
+            const punto = el("span", "inline-block w-2 h-2 rounded-full mr-2 align-middle "
+                + (r.presente ? "bg-green-400" : "bg-gray-600"));
+            punto.title = r.presente ? "Presente en el último ciclo" : "Ausente en el último ciclo";
+            const nombre = r.hotspot ? "Hotspot personal" : r.oculta ? "(red oculta)" : r.ssid;
+            tdRed.append(punto, el("span", r.hotspot || r.oculta ? "italic text-gray-400" : "font-medium", nombre));
+
+            const tdMarca = el("td", "py-2 px-3");
+            tdMarca.append(el("div", "", marcaRouter(r)));
+            if (r.modelo_wps) tdMarca.append(el("div", "text-xs text-gray-400", r.modelo_wps));
+
+            const seg = seguridadDe(r.seguridad);
+            const tdSeguridad = el("td", "py-2 px-3 whitespace-nowrap");
+            const etiqueta = el("span", "text-xs rounded-full px-2 py-0.5", r.seguridad);
+            etiqueta.style.backgroundColor = seg.color + "33";
+            etiqueta.style.color = seg.color;
+            tdSeguridad.append(etiqueta);
+
+            fila.append(
+                tdRed,
+                el("td", "py-2 px-3 font-mono text-xs whitespace-nowrap text-gray-400", r.mac),
+                tdMarca,
+                tdSeguridad,
+                el("td", "py-2 px-3 whitespace-nowrap", GENERACIONES[r.wifi] || GENERACIONES[0]),
+                el("td", "py-2 px-3 tabular-nums", r.canal || "-"),
+                celdaDistancia(distancia(r.rssi_ultimo)),
+                el("td", "py-2 px-3 tabular-nums whitespace-nowrap", `${r.rssi_ultimo} / ${r.rssi_max}`),
+                el("td", "py-2 px-3 tabular-nums", `${Math.round(100 * r.ciclos / totalCiclos)} %`),
+            );
+            tbody.append(fila);
+        });
+    }
+
+    function renderCalibracion() {
+        $("c-rssi1m").value = estado.calib.rssi1m;
+        $("c-n").value = estado.calib.n;
+        $("c-rssi1m-valor").textContent = estado.calib.rssi1m;
+        $("c-n-valor").textContent = estado.calib.n.toFixed(1);
+
+        $("c-tabla").replaceChildren(...[-40, -50, -60, -70, -80, -90].map(rssi => {
+            const m = distancia(rssi);
+            const fila = el("tr");
+            fila.append(
+                el("td", "py-2 font-mono", `${rssi} dBm`),
+                el("td", "py-2 tabular-nums", fmtMetros(m)),
+                el("td", "py-2", zonaDe(m).nombre),
+            );
+            return fila;
+        }));
+    }
+
+    function mostrarPestana(nombre) {
+        PESTANAS.forEach(p => {
+            const activa = p === nombre;
+            $(`sec-${p}`).classList.toggle("hidden", !activa);
+            const boton = $(`tab-${p}`);
+            boton.setAttribute("aria-selected", activa);
+            boton.classList.toggle("bg-gray-800", activa);
+            boton.classList.toggle("text-blue-400", activa);
+            boton.classList.toggle("text-gray-400", !activa);
+        });
+        // Chart.js no puede medir canvas ocultos: se ajustan al mostrarse
+        Object.values(graficas).forEach(g => g.resize());
+        guardarLocal("pestana", nombre);
+    }
+
+    // ---------------- Inicio ----------------
+    function iniciar() {
+        const calib = leerLocal("calibracion");
+        if (calib && typeof calib.rssi1m === "number" && typeof calib.n === "number") estado.calib = calib;
+
+        $("f-zona").replaceChildren(
+            new Option("Todas las distancias", "todas"),
+            ...ZONAS.map(z => new Option(`${z.nombre} (${z.rango})`, z.nombre)),
+        );
+
+        document.querySelectorAll("[data-pestana]").forEach(b =>
+            b.addEventListener("click", () => mostrarPestana(b.dataset.pestana)));
+        $("btn-actualizar").addEventListener("click", cargarDatos);
+        $("periodo").addEventListener("change", e => {
+            estado.horas = Number(e.target.value);
+            cargarDatos();
+        });
+        ["f-busqueda", "f-tipo", "f-zona", "f-orden", "f-presentes"].forEach(id =>
+            $(id).addEventListener("input", renderEquipos));
+
+        $("r-seguridad").replaceChildren(
+            new Option("Toda seguridad", "todas"),
+            new Option("Solo inseguras", "inseguras"),
+            ...SEGURIDADES.map(s => new Option(s.nombre, s.nombre)),
+        );
+        ["r-busqueda", "r-seguridad", "r-presentes"].forEach(id =>
+            $(id).addEventListener("input", renderRouters));
+        $("d-cerrar").addEventListener("click", () => {
+            estado.seleccionado = null;
+            estado.historial = null;
+            renderDetalle();
+            renderEquipos();
+        });
+
+        const alCalibrar = () => {
+            estado.calib = { rssi1m: Number($("c-rssi1m").value), n: Number($("c-n").value) };
+            guardarLocal("calibracion", estado.calib);
+            renderTodo();
+        };
+        $("c-rssi1m").addEventListener("input", alCalibrar);
+        $("c-n").addEventListener("input", alCalibrar);
+        $("c-restablecer").addEventListener("click", () => {
+            estado.calib = { ...CALIBRACION_INICIAL };
+            guardarLocal("calibracion", estado.calib);
+            renderTodo();
+        });
+
+        renderCalibracion();
+        const pestana = leerLocal("pestana");
+        mostrarPestana(PESTANAS.includes(pestana) ? pestana : "resumen");
+        cargarDatos();
+        setInterval(cargarDatos, REFRESCO_MS);
+    }
+
+    iniciar();
+</script>
+</body>
+</html>

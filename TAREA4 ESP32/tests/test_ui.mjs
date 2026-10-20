@@ -1,0 +1,45 @@
+import {Window} from 'happy-dom';
+import fs from 'node:fs';import assert from 'node:assert/strict';
+const html=fs.readFileSync('PanelTiempoReal.html','utf8'),script=html.split('<script>')[1].split('</script>')[0];let now=1000;
+const w=new Window({url:'http://localhost'});w.document.write(html.replace(/<script>[\s\S]*?<\/script>/,''));w.setInterval=()=>0;Object.defineProperty(w.performance,'now',{value:()=>now});w.eval(script+`;window.test={acceptLine,render,visibleRows,openDetail,setView,setProtocol,startDemo,stopDemo,startTest,finishTest,testStatistics,handleExport,read:()=>({meta,boot,demo,history,testHistory,currentTest,transfer,connected,wifi,ble}),setConnected:v=>{connected=v;},setTransfer:v=>{transfer=v;},setPort:p=>{port=p;connected=true;},connect,disconnect};`);const t=w.test,$=id=>w.document.getElementById(id);t.setConnected(true);
+const status={kind:'status',firmware:'7.0',b:1,ms:1000,ttl:60000,wifi:1,ble:1,aps:1,clients:0,wifiKnown:1,bleKnown:1,wifiCapacity:false,bleCapacity:false,wifiOmitted:0,bleOmitted:0,rxOmitted:0,bleRxOmitted:0,radio:'Wi-Fi',channel:6,wifiReady:true,bleReady:true,wifiError:'',bleError:'',storage:true,storageError:'',logBytes:100,heap:100000,minHeap:95000,oled:false,rtc:false,clock:true,epoch:Math.floor(Date.now()/1000),watchdog:true,resetReason:1};
+const row={kind:'wifi',b:1,slot:0,mac:'90:00:00:00:00:01',local:false,role:'AP',ssid:'Red',name:'<img src=x onerror=alert(1)>',nameSource:'WPS',vendor:'Titular IEEE',manufacturer:'Marca declarada',model:'Modelo declarado',number:'',rssi:-55,channel:6,frames:5,last:900};
+const b={kind:'ble',b:1,slot:0,mac:'C3:00:00:00:00:01',addressType:1,name:'Anunciante <script>x</script>',companyId:76,company:'Titular SIG',companyConflict:false,appearance:null,disAdvertised:false,rssi:-65,frames:3,last:900};
+t.acceptLine('not json');t.acceptLine(JSON.stringify(status));t.acceptLine(JSON.stringify(row));t.acceptLine(JSON.stringify(b));t.render();assert.equal($('wifiCount').textContent,'1');assert.equal($('bleCount').textContent,'1');assert.equal($('observationRows').querySelectorAll('tr').length,2);assert.equal($('observationRows').querySelectorAll('img,script').length,0);assert($('oledHealth').textContent.includes('Opcional'));
+$('wifiCard').click();assert.equal($('view-explorer').hidden,false);assert.equal(t.visibleRows().length,1);t.openDetail('wifi:0');assert($('detailDialog').open);assert($('detailContent').textContent.includes('Modelo declarado'));assert.equal($('detailContent').querySelectorAll('img').length,0);$('closeDetail').click();
+t.setProtocol('all');$('search').value='titular sig';$('search').dispatchEvent(new w.Event('input'));assert.equal(t.visibleRows().length,1);$('search').value='';$('search').dispatchEvent(new w.Event('input'));$('signalFilter').value='-55';assert.equal(t.visibleRows().length,1);$('signalFilter').value='-127';
+t.acceptLine(JSON.stringify({...row,slot:96}));t.acceptLine(JSON.stringify({...b,slot:32}));assert.equal(t.read().wifi.size,1);assert.equal(t.read().ble.size,1);t.acceptLine(JSON.stringify({...status,wifi:200}));assert.equal(t.read().meta.wifi,1);
+t.acceptLine(JSON.stringify({...status,ms:70000,wifi:0,ble:0}));assert.equal(t.visibleRows().length,0);$('onlyRecent').checked=false;assert.equal(t.visibleRows().length,2);$('onlyRecent').checked=true;t.acceptLine(JSON.stringify({...status,ms:1001,wifiCapacity:true}));assert.equal(t.read().meta.ms,70000); // old status rejected
+now+=5000;t.render();assert.equal($('wifiCount').textContent,'—');assert($('connectionBadge').textContent.includes('interrumpida'));
+t.acceptLine(JSON.stringify({...status,ms:71000,wifiCapacity:true,wifiOmitted:2}));t.render();assert($('alerts').textContent.includes('Capacidad'));assert($('alerts').textContent.includes('omitidas'));assert(!$('alerts').hidden);
+assert.deepEqual(JSON.parse(JSON.stringify(t.testStatistics([3,5,7],5))),{mean:5,mae:4/3,bias:0,min:3,max:7,relative:4/15*100});assert.equal(t.testStatistics([0,1],0).relative,null);
+$('testExpected').value='1';t.startTest();assert(t.read().currentTest);now+=59000;t.acceptLine(JSON.stringify({...status,ms:130000}));assert.equal(t.read().currentTest.values.length,0);now+=1000;t.acceptLine(JSON.stringify({...status,ms:131000}));assert.equal(t.read().currentTest.values.length,1);now+=5000;t.acceptLine(JSON.stringify({...status,ms:136000,wifi:3}));t.finishTest();assert.equal(t.read().testHistory.length,1);assert.equal(t.read().testHistory[0].mean,2);assert.equal(t.read().testHistory[0].mae,1);
+t.startTest();t.acceptLine(JSON.stringify({...status,b:2}));assert.equal(t.read().currentTest,null);assert($('testMessage').textContent.includes('reinició'));assert.equal(t.read().wifi.size,0);assert.equal(t.read().ble.size,0);
+let downloads=[];w.URL.createObjectURL=blob=>{downloads.push(blob);return 'blob:test';};w.URL.revokeObjectURL=()=>{};w.HTMLAnchorElement.prototype.click=()=>{};
+const bytes=new TextEncoder().encode('fila;áé;Wi-Fi\n');t.setTransfer({id:null,bytes:0,header:'cabecera\n',received:0,part:0,chunks:[],at:now});t.handleExport({kind:'export_start',id:7,bytes:bytes.length,header:'cabecera\n'});t.handleExport({kind:'export_chunk',id:7,part:0,data:Buffer.from(bytes.slice(0,6)).toString('base64')});t.handleExport({kind:'export_chunk',id:7,part:1,data:Buffer.from(bytes.slice(6)).toString('base64')});t.handleExport({kind:'export_end',id:7,parts:2});assert.equal(downloads.length,1);assert((await downloads[0].text()).includes('áé'));
+t.setTransfer({id:7,bytes:2,received:0,part:0,chunks:[],at:now});t.handleExport({kind:'export_chunk',id:7,part:1,data:'YQ=='});assert.equal(t.read().transfer,null);assert($('exportProgress').textContent.includes('incompleta'));
+t.setConnected(false);const before=t.read().history.length;t.startDemo();assert(t.read().demo);assert($('demoNotice').hidden===false);assert.equal(t.read().history.length,before);t.startTest();assert.equal(t.read().currentTest,null);assert($('startTest').disabled);$('exportRows').click();assert((await downloads.at(-1).text()).includes('"SI"'));t.stopDemo();assert.equal(t.read().demo,false);assert.equal(t.read().meta,null);assert.equal(t.read().wifi.size,0);
+// V7.1 network settings: preserve editing, clear password, flag radio pauses.
+t.setConnected(true);
+t.acceptLine(JSON.stringify({...status,firmware:'7.1',b:90,ms:1000,netPaused:false}));
+const net={kind:'network',configured:false,ssid:'',hasPassword:false,enabled:false,endpoint:'https://ejemplo.com/datos',interval:300,busy:false,phase:'Captura',message:'Sin configurar',http:0,successes:0};
+t.acceptLine(JSON.stringify(net));t.render();assert.equal($('netSave').disabled,false);
+$('netSsid').value='Mi red';t.acceptLine(JSON.stringify(net));assert.equal($('netSsid').value,'Mi red');
+const writes=[];t.setPort({writable:{getWriter:()=>({write:async bytes=>writes.push(JSON.parse(new TextDecoder().decode(bytes))),releaseLock(){}})}});
+$('netPassword').value='clave-unica-privada-123';$('netEnabled').checked=true;
+await $('netSave').onclick();assert.equal($('netPassword').value,'');
+assert(writes.some(x=>x.cmd==='network_set'&&x.ssid==='Mi red'&&x.enabled));
+assert(!JSON.stringify(w.localStorage).includes('clave-unica-privada-123'));
+t.acceptLine(JSON.stringify({...net,configured:true,ssid:'Mi red',hasPassword:true,message:'<img src=x onerror=alert(1)>'}));assert.equal($('netStatus').querySelectorAll('img').length,0);
+$('testExpected').value='1';t.startTest();t.acceptLine(JSON.stringify({...status,firmware:'7.1',b:90,ms:1001,radio:'Red',netPaused:true}));t.render();assert(t.read().currentTest.invalid);assert($('alerts').textContent.includes('pausada'));
+t.acceptLine(JSON.stringify({...net,configured:false,message:'Olvidada'}));assert.equal($('netSsid').value,'');
+// V7.2: explicit type column, filter, evidence, old rows remain unknown.
+t.setConnected(true);t.acceptLine(JSON.stringify({...status,firmware:'7.2',b:99,ms:1000,netPaused:false}));
+t.acceptLine(JSON.stringify({...row,b:99,deviceType:'projector',deviceLabel:'Cañón / proyector',classLevel:'declared',classEvidence:'Tipo primario WPS'}));
+t.acceptLine(JSON.stringify({...b,b:99,deviceType:'laptop',deviceLabel:'Laptop',classLevel:'hint',classEvidence:'Nombre BLE'}));
+t.setProtocol('all');t.render();assert($('observationRows').textContent.includes('Cañón / proyector'));assert($('observationRows').textContent.includes('Posible; solo nombre'));
+$('deviceFilter').value='projector';$('deviceFilter').dispatchEvent(new w.Event('change'));assert.equal(t.visibleRows().length,1);
+t.openDetail('wifi:0');assert($('detailContent').textContent.includes('Tipo primario WPS'));$('closeDetail').click();
+t.acceptLine(JSON.stringify({...row,b:99,slot:1,deviceType:'inventado',deviceLabel:'Falso',classLevel:'declared',classEvidence:'Nada'}));assert.equal(t.read().wifi.size,1);
+$('deviceFilter').value='all';$('deviceFilter').dispatchEvent(new w.Event('change'));
+w.happyDOM.abort();console.log('OK: USB status, separate counts, filters/details, XSS, capacity/stale states, warmup/statistics/incidents/restart, UTF8 download/sequence, isolated demo and CSV.');

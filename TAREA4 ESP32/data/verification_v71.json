@@ -1,0 +1,30 @@
+{
+  "firmware": "7.1",
+  "arduino_esp32": "3.3.2",
+  "target": "ESP32 classic / Huge APP 4MB",
+  "program_bytes": 2945171,
+  "program_limit_bytes": 3145728,
+  "globals_bytes": 102724,
+  "board_tested": false,
+  "aws_deployed": false,
+  "ieee_prefixes": 54220,
+  "sig_company_ids": 4049,
+  "backend_tests": 10,
+  "files_compiled_sha256": {
+    "DetectorTiempoReal/announcements.h": "772d1a90bfabcc4ee7e00917fe51f57a02aea78acf7c496636a1215df4fb75f6",
+    "DetectorTiempoReal/ieee_registry.h": "bd907bb360631a18d819aae8bb7c1d13287253a1d44a7688d76e501e0dbbb255",
+    "DetectorTiempoReal/network_runtime.h": "cf8df0f2de5fdea52694601aab616377337c4dfc1230021525b6a292c54baf1c",
+    "DetectorTiempoReal/bluetooth_companies.h": "e59430a6e8f1e74a7bf09da9659b0f2f123b025494a73e473df54328aed365ae",
+    "DetectorTiempoReal/hardware.h": "f30514e683848b6b38cf54588dae4a576bbb3b086c7e882b2751255ccf1186bf",
+    "DetectorTiempoReal/cloud_ca.h": "3c2e8059ce3d88d09b30252c9145240d8925ad6ec16e35560923c99a235b58d1",
+    "DetectorTiempoReal/ap_capabilities.h": "8573a9fd2cdf253efcf1cabcc7285a5c7a3416d27f960bc143b534a49c31e6d5",
+    "DetectorTiempoReal/count_core.h": "be5822cbb0dc4dc8f98a62afc86e143cf53d60fa249b754415296c5f1e5b792f",
+    "DetectorTiempoReal/oui_data.h": "b5f2c0eb0aa6e98d8e64d4fde98e542f688e031749bf8410841657f5c7ae5f2b",
+    "DetectorTiempoReal/ieee_data.h": "b1f439512eddcc44ace24b3a79cd883d227e882b20999e0482aab497fc815069",
+    "DetectorTiempoReal/config.h": "ff0127be8213167a4b371c20ff984cb3b1450c26819f9d9ec38098fac27e3c89",
+    "DetectorTiempoReal/journal.h": "2de56c78156d1986aca383fedac39bf701d7d0c146c4c13a91ed294df89b51dd",
+    "DetectorTiempoReal/ble_core.h": "ce7be5f38ba14b1a39be5cc5f2b093e01e0980b0ba017a892c0d63b63bac5792",
+    "DetectorTiempoReal/network_config.h": "cabf877cdb50b151af8c6b8d0abea50d66f9ad48a1631b7a2a585158ad826e64",
+    "DetectorTiempoReal/DetectorTiempoReal.ino": "eb186097f2545afa13defcd5783bc174c08bc6fbf3c8b01ecf8e6440b1f13bc5"
+  }
+}

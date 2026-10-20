@@ -1,0 +1,51 @@
+{
+  "retrieved_utc": "2026-10-19T07:15:09.666954+00:00",
+  "sources": [
+    {
+      "registry": "MA-L",
+      "prefix_bits": 24,
+      "records": 40344,
+      "url": "https://standards-oui.ieee.org/oui/oui.csv",
+      "sha256": "bdd0377ed4a4b3fa5e1b7445a29a64c39d5179d40dd8a50038789abb2aff5c8d",
+      "source_bytes": 3859348
+    },
+    {
+      "registry": "MA-M",
+      "prefix_bits": 28,
+      "records": 6641,
+      "url": "https://standards-oui.ieee.org/oui28/mam.csv",
+      "sha256": "017ee7aa97e3b58a87e79298083e884615beccebd4249470790a5b0a8762d085",
+      "source_bytes": 759543
+    },
+    {
+      "registry": "MA-S",
+      "prefix_bits": 36,
+      "records": 7235,
+      "url": "https://standards-oui.ieee.org/oui36/oui36.csv",
+      "sha256": "99f517da5126ca6f8d67fe5cac90bb86f1a4d404bd38450d81cc86f58b043536",
+      "source_bytes": 672264
+    }
+  ],
+  "organizations": 30825,
+  "name_pool_bytes": 726901,
+  "multiple_public_registrants": [
+    {
+      "registry": "MA-L",
+      "assignment": "0001C8",
+      "organizations": [
+        "CONRAD CORP.",
+        "THOMAS CONRAD CORP."
+      ]
+    },
+    {
+      "registry": "MA-L",
+      "assignment": "080030",
+      "organizations": [
+        "CERN",
+        "NETWORK RESEARCH CORPORATION",
+        "ROYAL MELBOURNE INST OF TECH"
+      ]
+    }
+  ],
+  "scope": "Public MA-L, MA-M and MA-S assignments; no model information; IAB and CID not included."
+}

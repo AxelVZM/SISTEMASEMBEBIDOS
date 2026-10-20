@@ -1,0 +1,29 @@
+import {Window} from 'happy-dom';
+import fs from 'node:fs';import assert from 'node:assert/strict';
+const html=fs.readFileSync('web/index.html','utf8');
+const script=html.split('<script>')[1].split('</script>')[0],transport=fs.readFileSync('web/ec2.js','utf8');
+const w=new Window({url:'https://example.org/esp32/'});w.document.write(html.replace(/<script[^>]*>[\s\S]*?<\/script>/g,''));
+let now=1000;const timers=[];w.setInterval=(fn,ms)=>{timers.push({fn,ms});return timers.length;};Object.defineProperty(w.performance,'now',{value:()=>now});
+const status={kind:'status',firmware:'7.2',b:1,ms:1000,ttl:60000,wifi:1,ble:0,aps:0,clients:1,wifiKnown:1,bleKnown:0,wifiCapacity:false,bleCapacity:false,wifiOmitted:0,bleOmitted:0,rxOmitted:0,bleRxOmitted:0,radio:'Wi-Fi',channel:6,wifiReady:true,bleReady:true,wifiError:'',bleError:'',storage:true,storageError:'',logBytes:100,heap:100000,minHeap:95000,oled:false,rtc:false,clock:true,epoch:Math.floor(Date.now()/1000),watchdog:true,resetReason:1};
+const row={kind:'wifi',b:1,slot:0,mac:'8E:00:00:00:00:01',local:true,role:'Cliente',ssid:'',name:'iPhone',nameSource:'WPS',vendor:'No inferible',manufacturer:'',model:'',number:'',rssi:-55,channel:6,frames:5,last:900,deviceType:'phone',deviceLabel:'Telefono / celular',classLevel:'hint',classEvidence:'Nombre anunciado'};
+let calls=[],online=true;
+w.fetch=async(path,opt={})=>{
+ calls.push({path:String(path),opt});
+ const data=String(path).includes('history')?{points:[]}:String(path).includes('live')?{online,packets:[status,row]}:{ok:true};
+ return {ok:true,json:async()=>data};
+};
+w.eval(transport+'\n'+script+`;window.test={acceptLine,render,read:()=>({meta,connected,netInfo}),setConnected:v=>{connected=v;},clearSession};`);
+const t=w.test,$=id=>w.document.getElementById(id);
+$('ec2Token').value='test-only-token-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';$('ec2Save').click();
+t.setConnected(true);t.acceptLine(JSON.stringify(status));t.acceptLine(JSON.stringify(row));
+await timers.find(x=>x.fn.name==='publish').fn();
+let ingest=calls.find(x=>x.path==='api/ingest');assert(ingest);let body=JSON.parse(ingest.opt.body);assert.equal(body.packets.length,2);assert(body.source_id);assert(!ingest.opt.body.includes('test-only-token'));assert(ingest.opt.headers.Authorization.startsWith('Bearer '));
+// Ignore network configuration packets; they may contain Wi-Fi configuration status.
+t.acceptLine(JSON.stringify({kind:'network',configured:true,ssid:'Private network',hasPassword:true,enabled:false,endpoint:'https://example.org',interval:300,busy:false,phase:'Captura',message:'Guardado',http:0,successes:0}));
+let count=calls.filter(x=>x.path==='api/ingest').length;await timers.find(x=>x.fn.name==='publish').fn();assert.equal(calls.filter(x=>x.path==='api/ingest').length,count);
+t.setConnected(false);t.clearSession();
+await $('ec2Remote').onclick();assert(w.orbitaEC2.remote);assert.equal($('wifiCount').textContent,'1');assert.equal($('exportLog').disabled,true);assert.equal($('startTest').disabled,true);
+count=calls.filter(x=>x.path==='api/ingest').length;await timers.find(x=>x.fn.name==='publish').fn();assert.equal(calls.filter(x=>x.path==='api/ingest').length,count);
+online=false;await timers.find(x=>x.fn.name==='poll').fn();assert.equal($('wifiCount').textContent,'—');assert($('ec2State').textContent.includes('sin datos recientes'));
+$('ec2Stop').click();assert(!w.orbitaEC2.remote);assert(!t.read().connected);
+w.happyDOM.abort();console.log('OK: USB->API batch, bearer token, no network settings upload, remote view, no feedback loop, stale/offline, remote USB controls disabled, prefix-relative API paths.');

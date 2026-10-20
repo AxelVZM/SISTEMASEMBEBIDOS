@@ -1,0 +1,35 @@
+services:
+  app:
+    build: .
+    restart: unless-stopped
+    environment:
+      ORBITA_API_TOKEN: ${ORBITA_API_TOKEN:?Ejecuta python3 herramientas/configurar_servidor.py}
+      ORBITA_DB_PATH: /datos/orbita.sqlite3
+    ports:
+      - "127.0.0.1:8010:8000"
+    volumes:
+      - orbita_datos:/datos
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/health', timeout=3)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+  https:
+    image: caddy:2-alpine
+    profiles: ["https"]
+    restart: unless-stopped
+    environment:
+      DOMAIN: ${DOMAIN:-localhost}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./despliegue/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - app
+volumes:
+  orbita_datos:
+  caddy_data:
+  caddy_config:

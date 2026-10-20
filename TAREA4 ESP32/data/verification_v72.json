@@ -1,0 +1,35 @@
+{
+  "firmware": "7.2",
+  "target": "ESP32 classic / Huge APP",
+  "core": "3.3.2",
+  "program_bytes": 2951799,
+  "program_limit": 3145728,
+  "globals_bytes": 103876,
+  "board_tested": false,
+  "backend_tests": 11,
+  "classifier_accuracy_measured": false,
+  "basis": [
+    "WPS Primary Device Type",
+    "P2P Primary Device Type",
+    "BLE Appearance",
+    "name heuristics",
+    "AP role"
+  ],
+  "firmware_headers_sha256": {
+    "announcements.h": "82dbe79d494f1389e9dc76da7e05920cf87aca4d25200de265b4d739bcc01363",
+    "ieee_registry.h": "bd907bb360631a18d819aae8bb7c1d13287253a1d44a7688d76e501e0dbbb255",
+    "network_runtime.h": "451355b8e9fd3b58b8490d20c0246335048988b3876a9d2f1936a543413abfe2",
+    "bluetooth_companies.h": "e59430a6e8f1e74a7bf09da9659b0f2f123b025494a73e473df54328aed365ae",
+    "hardware.h": "f30514e683848b6b38cf54588dae4a576bbb3b086c7e882b2751255ccf1186bf",
+    "cloud_ca.h": "3c2e8059ce3d88d09b30252c9145240d8925ad6ec16e35560923c99a235b58d1",
+    "ap_capabilities.h": "8573a9fd2cdf253efcf1cabcc7285a5c7a3416d27f960bc143b534a49c31e6d5",
+    "device_classifier.h": "f8e06e88259b60898d25cedcf1fc7fccf295fd2e03511c38fbafbeb6842f1827",
+    "count_core.h": "b74ee133d1ee0201817526ec54cdaa316c6dc13c463b33a0c19c18117a59af50",
+    "oui_data.h": "b5f2c0eb0aa6e98d8e64d4fde98e542f688e031749bf8410841657f5c7ae5f2b",
+    "ieee_data.h": "b1f439512eddcc44ace24b3a79cd883d227e882b20999e0482aab497fc815069",
+    "config.h": "ff0127be8213167a4b371c20ff984cb3b1450c26819f9d9ec38098fac27e3c89",
+    "journal.h": "ab84cddf4ace12f180c3a16e79e3fe7809f2c8ede9c56dfa2b4915d6f73e163e",
+    "ble_core.h": "e0fa4a681cc1240d2ca1eecf4aade10976f95d8526d617d35b99ff089a927f16",
+    "network_config.h": "cabf877cdb50b151af8c6b8d0abea50d66f9ad48a1631b7a2a585158ad826e64"
+  }
+}
