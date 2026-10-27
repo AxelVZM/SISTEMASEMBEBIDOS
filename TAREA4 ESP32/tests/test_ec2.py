@@ -12,7 +12,7 @@ spec=importlib.util.spec_from_file_location('bridge',ROOT/'herramientas/puente_u
 TOKEN='test-ec2-key-not-a-real-token-'+('a'*32)
 
 def status(ms=1000,boot=1):
-    return dict(kind='status',firmware='7.3',b=boot,ms=ms,ttl=60000,wifi=1,ble=1,aps=0,clients=1,wifiKnown=1,bleKnown=1,wifiCapacity=False,bleCapacity=False,wifiOmitted=0,bleOmitted=0,rxOmitted=0,bleRxOmitted=0,radio='Wi-Fi',channel=6,wifiReady=True,bleReady=True,wifiError='',bleError='',storage=True,storageError='',logBytes=100,heap=100000,minHeap=90000,oled=False,rtc=False,clock=True,epoch=1792510000,watchdog=True,resetReason=1,netPaused=False)
+    return dict(kind='status',firmware='7.4',b=boot,ms=ms,ttl=60000,wifi=1,ble=1,aps=0,clients=1,wifiKnown=1,bleKnown=1,wifiCapacity=False,bleCapacity=False,wifiOmitted=0,bleOmitted=0,rxOmitted=0,bleRxOmitted=0,radio='Wi-Fi',channel=6,wifiReady=True,bleReady=True,wifiError='',bleError='',storage=True,storageError='',logBytes=100,heap=100000,minHeap=90000,oled=False,rtc=False,clock=True,epoch=1792510000,watchdog=True,resetReason=1,netPaused=False)
 
 def wifi():
     return dict(kind='wifi',b=1,slot=0,mac='8E:E5:9B:2A:CF:4E',local=True,role='Cliente',ssid='',name='MacBook de prueba',nameSource='WPS',vendor='No inferible: MAC local',manufacturer='',model='',number='',rssi=-45,channel=6,frames=8,last=900,deviceType='laptop',deviceLabel='Laptop',classLevel='hint',classEvidence='Nombre anunciado')
@@ -29,6 +29,16 @@ class ServerTests(unittest.TestCase):
     def post(self,packets=None,source='test-source'):
         return self.client.post('/api/ingest',json={'sensor_id':'esp32-principal','source_id':source,'packets':packets or [status(),wifi()]},headers=self.auth)
     def live(self):return self.client.get('/api/live',headers=self.auth).get_json()
+    def test_identity75_roundtrip(self):
+        w=dict(wifi(),brand='Honor',resolvedModel='Magic6 Pro',identityEvidence='Codigo anunciado')
+        l=dict(kind='lan',b=1,slot=0,scan=1,last=1000,name='Router',host='',ip='192.168.1.5',service='SSDP/UPnP',port=80,brand='TP-Link',model='Archer',modelCode='A1',resolvedModel='',evidence='UPnP XML',deviceType='router',deviceLabel='Router',classLevel='declared',classEvidence='UPnP InternetGatewayDevice anunciado')
+        self.assertEqual(self.post([dict(status(),firmware='7.5',lanScan=1,lanCount=1,lanState='done'),w,l]).status_code,200)
+        rows=self.live()['packets']
+        self.assertEqual(next(p for p in rows if p['kind']=='wifi')['resolvedModel'],'Magic6 Pro')
+        self.assertEqual(next(p for p in rows if p['kind']=='lan')['deviceType'],'router')
+        self.assertEqual(next(p for p in rows if p['kind']=='lan')['modelCode'],'A1')
+        self.assertEqual(self.post([dict(l,classLevel='certain')]).status_code,400)
+        self.assertEqual(self.post([dict(w,resolvedModel='x'*101)]).status_code,400)
     def test_auth_and_static(self):
         self.assertEqual(self.client.get('/api/live').status_code,401)
         with self.client.get('/') as r:self.assertEqual(r.status_code,200)
@@ -40,7 +50,7 @@ class ServerTests(unittest.TestCase):
         d=self.live();self.assertTrue(d['online']);self.assertEqual(len(d['packets']),2)
         self.assertEqual(d['packets'][0]['wifi'],1)
         self.assertEqual(next(p for p in d['packets'] if p['kind']=='wifi')['deviceType'],'laptop')
-        self.assertEqual(self.post([ble()]).status_code,400)
+        self.assertEqual(self.post([ble()]).status_code,200)
     def test_fingerprint_roundtrip(self):
         row=dict(wifi(),fingerprint='01028284',fingerprintComplete=True,fingerprintVersion=1,probeFrames=12)
         self.assertEqual(self.post([status(),row]).status_code,200)
@@ -48,6 +58,15 @@ class ServerTests(unittest.TestCase):
         for k in ('fingerprint','fingerprintComplete','fingerprintVersion','probeFrames'):self.assertEqual(received[k],row[k])
         for bad in ('z1','123','aa'*97):self.assertEqual(self.post([dict(row,fingerprint=bad)]).status_code,400)
         with self.client.get('/wifi_catalog.json') as response:self.assertEqual(response.get_json()['entries'],[])
+    def test_discovery_roundtrip_and_reset(self):
+        b=dict(ble(),brand='Apple',model='AirPods 1a generacion',modelId='2002',modelSource='Apple proximity pairing / Theengs',modelConflict=False,encrypted=False)
+        l=dict(kind='lan',b=1,slot=0,scan=1,last=1000,name='Printer',host='printer',ip='192.168.1.5',service='_ipp',port=631,brand='Vendor',model='Printer-1',evidence='mDNS TXT: ty')
+        self.assertEqual(self.post([dict(status(),lanScan=1,lanCount=1,lanState='done',lanMessage='1 servicio',bleSelected=True),b,l]).status_code,200)
+        packets=self.live()['packets'];self.assertEqual(next(p for p in packets if p['kind']=='ble')['model'],b['model']);self.assertEqual(next(p for p in packets if p['kind']=='lan')['model'],l['model'])
+        self.post([dict(status(2000),lanScan=2,lanState='connecting')]);self.assertFalse(any(p['kind']=='lan' for p in self.live()['packets']))
+        self.assertEqual(self.post([dict(l,slot=24)]).status_code,400)
+        self.assertEqual(self.post([dict(b,modelConflict='yes')]).status_code,400)
+        with self.client.get('/modes.js') as response:self.assertEqual(response.status_code,200)
     def test_missing_sensor_is_offline(self):self.assertFalse(self.live()['online'])
     def test_stale_status_not_refreshed_by_duplicates(self):
         self.post();self.now+=6;self.post();self.assertFalse(self.live()['online'])

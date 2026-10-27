@@ -20,12 +20,30 @@ def integer(v,lo,hi):
     return isinstance(v,int) and not isinstance(v,bool) and lo<=v<=hi
 
 def validate_packet(p):
-    if not isinstance(p,dict) or p.get('kind') not in ('status','wifi'):
-        raise ValueError('Solo se aceptan paquetes status/wifi')
+    if not isinstance(p,dict) or p.get('kind') not in ('status','wifi','ble','lan'):
+        raise ValueError('Solo se aceptan paquetes status/wifi/ble/lan')
     if not integer(p.get('b'),0,0xffffffff): raise ValueError('Sesión inválida')
     kind=p['kind']; out={}
+    if kind=='lan':
+        for k,hi in (('slot',23),('scan',0xffffffff),('port',65535),('last',0xffffffff)):
+            if not integer(p.get(k),0,hi):raise ValueError('Dato LAN inválido: '+k)
+            out[k]=p[k]
+        for k,n in (('name',64),('host',64),('ip',45),('service',31),('brand',64),('model',96),('evidence',100)):
+            if not isinstance(p.get(k),str) or len(p[k])>n:raise ValueError('Texto LAN inválido: '+k)
+            out[k]=p[k]
+        for k,n in (('modelCode',64),('resolvedModel',100)):
+            value=p.get(k,'')
+            if not isinstance(value,str) or len(value)>n:raise ValueError('Identidad LAN inválida')
+            out[k]=value
+        if 'deviceType' in p:
+            if p['deviceType'] not in KINDS or p.get('classLevel') not in LEVELS:raise ValueError('Clasificación LAN inválida')
+            out.update(deviceType=p['deviceType'],classLevel=p['classLevel'])
+            for k,n in (('deviceLabel',80),('classEvidence',200)):
+                if not isinstance(p.get(k),str) or len(p[k])>n:raise ValueError('Evidencia LAN inválida')
+                out[k]=p[k]
+        out.update(kind=kind,b=p['b']);return out
     if kind=='status':
-        if p.get('firmware') not in ('7.0','7.1','7.2','7.3'):raise ValueError('Versión de firmware incompatible')
+        if p.get('firmware') not in ('7.0','7.1','7.2','7.3','7.4','7.5'):raise ValueError('Versión de firmware incompatible')
         bounds={'ms':0xffffffff,'wifi':96,'ble':32,'wifiKnown':96,'bleKnown':32,'aps':96,'clients':96,'channel':11,'heap':0xffffffff,'minHeap':0xffffffff,'logBytes':0xffffffff,'wifiOmitted':0xffffffff,'bleOmitted':0xffffffff,'rxOmitted':0xffffffff,'bleRxOmitted':0xffffffff}
         for k,hi in bounds.items():
             if not integer(p.get(k),1 if k=='channel' else 0,hi):raise ValueError('Estado inválido: '+k)
@@ -41,6 +59,8 @@ def validate_packet(p):
         if epoch is not None and not integer(epoch,1704067200,4102444799):raise ValueError('Fecha inválida')
         out.update(firmware=p['firmware'],radio=p['radio'],epoch=epoch,ttl=60000,netPaused=p.get('netPaused',False))
         if not isinstance(out['netPaused'],bool):raise ValueError('Pausa inválida')
+        for k,default in (('bleSelected',False),('lanScan',0),('lanCount',0),('lanState','idle'),('lanMessage','')):out[k]=p.get(k,default)
+        if not isinstance(out['bleSelected'],bool) or not integer(out['lanScan'],0,0xffffffff) or not integer(out['lanCount'],0,24) or out['lanState'] not in ('idle','connecting','scanning','done','error') or not isinstance(out['lanMessage'],str) or len(out['lanMessage'])>300:raise ValueError('Estado de modos inválido')
     else:
         if not integer(p.get('slot'),0,95 if kind=='wifi' else 31) or not isinstance(p.get('mac'),str) or not MAC.fullmatch(p['mac']):raise ValueError('Fila/dirección inválida')
         rssi=p.get('rssi')
@@ -48,8 +68,8 @@ def validate_packet(p):
         if not integer(p.get('frames'),1,0xffffffff) or not integer(p.get('last'),0,0xffffffff):raise ValueError('Recepciones inválidas')
         out.update(slot=p['slot'],mac=p['mac'],rssi=rssi,frames=p['frames'],last=p['last'])
         fields={'name':64}
-        if kind=='wifi':fields.update(role=80,ssid=32,nameSource=80,vendor=400,manufacturer=100,model=100,number=100,security=100)
-        else:fields.update(company=400)
+        if kind=='wifi':fields.update(role=80,ssid=32,nameSource=80,vendor=400,manufacturer=100,model=100,number=100,security=100,brand=80,resolvedModel=100,identityEvidence=160)
+        else:fields.update(company=400,brand=80,model=100,modelId=8,modelSource=120)
         for k,n in fields.items():
             v=p.get(k,'')
             if not isinstance(v,str) or len(v)>n:raise ValueError('Texto de fila inválido: '+k)
@@ -67,6 +87,9 @@ def validate_packet(p):
             for k,hi in (('companyId',65535),('appearance',65535)):
                 if p.get(k) is not None and not integer(p[k],0,hi):raise ValueError('Dato BLE inválido')
                 out[k]=p.get(k)
+            for k in ('modelConflict','encrypted'):
+                if not isinstance(p.get(k,False),bool):raise ValueError('Bandera BLE inválida')
+                out[k]=p.get(k,False)
             out.update(addressType=p['addressType'],companyConflict=bool(p.get('companyConflict',False)),disAdvertised=bool(p.get('disAdvertised',False)))
         if 'deviceType' in p:
             if p['deviceType'] not in KINDS or p.get('classLevel') not in LEVELS:raise ValueError('Clasificación inválida')
@@ -123,10 +146,12 @@ def create_app(config=None):
     def page():return send_from_directory(web,'index.html')
     @app.get('/ec2.js')
     def script():return send_from_directory(web,'ec2.js')
+    @app.get('/modes.js')
+    def modes():return send_from_directory(web,'modes.js')
     @app.get('/wifi_catalog.json')
     def catalog():return send_from_directory(web,'wifi_catalog.json')
     @app.get('/api/health')
-    def health():return jsonify(ok=True,version='ec2-1',firmware='7.3')
+    def health():return jsonify(ok=True,version='ec2-1',firmware='7.5')
     @app.post('/api/ingest')
     @auth
     def ingest():
@@ -155,11 +180,13 @@ def create_app(config=None):
                 if previous:
                     delta=(p['ms']-previous['ms'])&0xffffffff
                     if delta==0 or delta>=0x80000000:continue
+                if previous and p['lanScan']!=previous.get('lanScan',0):c.execute("DELETE FROM packets WHERE sensor=? AND kind='lan'",(sid,))
                 c.execute('UPDATE sensors SET status=?,status_received=? WHERE id=?',(json.dumps(p,ensure_ascii=False),now,sid));previous=p;accepted+=1
                 last=c.execute('SELECT MAX(at) FROM history WHERE sensor=?',(sid,)).fetchone()[0]
                 if last is None or int(now*1000)-last>=5000:c.execute('INSERT OR IGNORE INTO history VALUES(?,?,?,?,?)',(sid,int(now*1000),p['wifi'],p['ble'],boot))
             for p in packets:
                 if p['kind']=='status':continue
+                if p['kind']=='lan' and (not previous or p['scan']!=previous.get('lanScan',0)):continue
                 prior=c.execute('SELECT payload FROM packets WHERE sensor=? AND kind=? AND slot=?',(sid,p['kind'],p['slot'])).fetchone()
                 if prior:
                     prior=json.loads(prior[0]);delta=(p['last']-prior['last'])&0xffffffff
@@ -174,7 +201,7 @@ def create_app(config=None):
         with db() as c:
             sensor=c.execute('SELECT * FROM sensors WHERE id=?',(sid,)).fetchone()
             if not sensor:return jsonify(sensor_id=sid,online=False,packets=[],server_time=now,last_seen=None)
-            packets=[json.loads(r[0]) for r in c.execute("SELECT payload FROM packets WHERE sensor=? AND kind='wifi' ORDER BY kind,slot",(sid,))]
+            packets=[json.loads(r[0]) for r in c.execute("SELECT payload FROM packets WHERE sensor=? AND kind IN ('wifi','ble','lan') ORDER BY kind,slot",(sid,))]
         status=json.loads(sensor['status']) if sensor['status'] else None
         return jsonify(sensor_id=sid,online=bool(status and now-sensor['status_received']<ONLINE_SECONDS),packets=([status] if status else [])+packets,server_time=now,last_seen=sensor['status_received'])
     @app.get('/api/history')

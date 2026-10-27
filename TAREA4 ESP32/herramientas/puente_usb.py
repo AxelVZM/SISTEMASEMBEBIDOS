@@ -14,8 +14,8 @@ class PacketBuffer:
     def __init__(self):
         self.lock=threading.Lock();self.rows={};self.boot=None;self.last_status=0
     def add(self,p):
-        if not isinstance(p,dict) or p.get('kind') not in ('status','wifi') or not isinstance(p.get('b'),int):return False
-        if p['kind']!='status' and (not isinstance(p.get('slot'),int) or not 0<=p['slot']<(96 if p['kind']=='wifi' else 32)):return False
+        if not isinstance(p,dict) or p.get('kind') not in ('status','wifi','ble','lan') or not isinstance(p.get('b'),int):return False
+        if p['kind']!='status' and (not isinstance(p.get('slot'),int) or not 0<=p['slot']<(96 if p['kind']=='wifi' else 24 if p['kind']=='lan' else 32)):return False
         with self.lock:
             if self.boot!=p['b']:self.rows.clear();self.boot=p['b']
             key='status' if p['kind']=='status' else p['kind']+':'+str(p['slot'])

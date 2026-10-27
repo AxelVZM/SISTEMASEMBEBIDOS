@@ -1,6 +1,8 @@
 #pragma once
 #include <initializer_list>
 #include "count_core.h"
+#include "ble_core.h"
+#include "identity.h"
 namespace detector {
 enum class DeviceKind:uint8_t {unknown,phone,laptop,computer,tablet,router,ap,network,projector,tv,display,printer,camera,audio,wearable,gaming,storage,media,peripheral,sensor};
 struct DeviceClass {DeviceKind kind=DeviceKind::unknown;const char *level="unknown",*evidence="Sin evidencia suficiente";};
@@ -14,6 +16,17 @@ inline DeviceKind primaryType(const uint8_t *t){
  case 6:return s==1?DeviceKind::ap:s==2?DeviceKind::router:DeviceKind::network;
  case 7:return s==1?DeviceKind::tv:s==3?DeviceKind::projector:DeviceKind::display;
  case 8:return DeviceKind::media;case 9:return DeviceKind::gaming;case 10:return DeviceKind::phone;case 11:return DeviceKind::audio;default:return DeviceKind::unknown;}
+}
+inline DeviceKind appearanceType(uint16_t a){
+ if(a==0x0083)return DeviceKind::laptop;if(a==0x0087)return DeviceKind::tablet;
+ if(a==0x0086)return DeviceKind::wearable;if(a==0x008d)return DeviceKind::network;
+ if(a==0x0a01)return DeviceKind::tv;if(a==0x0a03)return DeviceKind::projector;
+ unsigned c=a>>6;
+ if(c==1)return DeviceKind::phone;if(c==2)return DeviceKind::computer;if(c==3||c==7)return DeviceKind::wearable;
+ if(c==5||c==40)return DeviceKind::display;if(c==10||c==39)return DeviceKind::media;
+ if(c==6||c==15)return DeviceKind::peripheral;
+ if(c==12||c==13||c==14||c==16||c==17||c==18)return DeviceKind::sensor;
+ return DeviceKind::unknown;
 }
 inline DeviceKind mergeType(DeviceKind a,DeviceKind b,bool &conflict){
  if(a==DeviceKind::unknown)return b;if(b==DeviceKind::unknown||a==b)return a;
@@ -30,8 +43,8 @@ inline bool nameContains(const char*s,const char*pattern){
 inline DeviceKind nameHint(const char*s,bool &conflict){
  struct Rule {const char*word;DeviceKind kind;};
  static const Rule rules[]={
- {"iphone",DeviceKind::phone},{"smartphone",DeviceKind::phone},{"celular",DeviceKind::phone},{"redmi",DeviceKind::phone},{"moto g",DeviceKind::phone},{"galaxy s",DeviceKind::phone},{"galaxy a",DeviceKind::phone},{"galaxy z",DeviceKind::phone},{"pixel 6",DeviceKind::phone},{"pixel 7",DeviceKind::phone},{"pixel 8",DeviceKind::phone},{"pixel 9",DeviceKind::phone},{"pixel 10",DeviceKind::phone},
- {"laptop",DeviceKind::laptop},{"notebook",DeviceKind::laptop},{"macbook",DeviceKind::laptop},{"thinkpad",DeviceKind::laptop},{"ideapad",DeviceKind::laptop},{"vivobook",DeviceKind::laptop},
+ {"iphone",DeviceKind::phone},{"smartphone",DeviceKind::phone},{"celular",DeviceKind::phone},{"redmi note",DeviceKind::phone},{"moto g",DeviceKind::phone},{"galaxy s",DeviceKind::phone},{"galaxy a",DeviceKind::phone},{"galaxy z",DeviceKind::phone},{"pixel 6",DeviceKind::phone},{"pixel 7",DeviceKind::phone},{"pixel 8",DeviceKind::phone},{"pixel 9",DeviceKind::phone},{"pixel 10",DeviceKind::phone},
+ {"desktop",DeviceKind::computer},{"workstation",DeviceKind::computer},{"imac",DeviceKind::computer},{"mac mini",DeviceKind::computer},{"pc",DeviceKind::computer},{"sensor",DeviceKind::sensor},{"thermometer",DeviceKind::sensor},{"audifonos",DeviceKind::audio},{"reloj",DeviceKind::wearable},{"watch",DeviceKind::wearable},{"laptop",DeviceKind::laptop},{"notebook",DeviceKind::laptop},{"macbook",DeviceKind::laptop},{"thinkpad",DeviceKind::laptop},{"ideapad",DeviceKind::laptop},{"vivobook",DeviceKind::laptop},
  {"ipad",DeviceKind::tablet},{"tablet",DeviceKind::tablet},{"galaxy tab",DeviceKind::tablet},
  {"router",DeviceKind::router},{"access point",DeviceKind::ap},
  {"projector",DeviceKind::projector},{"proyector",DeviceKind::projector},{"smart tv",DeviceKind::tv},{"smarttv",DeviceKind::tv},{"bravia",DeviceKind::tv},
@@ -51,8 +64,19 @@ inline DeviceClass classifyWifi(const Record&r){
  if(structured!=DeviceKind::unknown)return {structured,"declared",v.wps.hasType&&v.p2p.hasType?"Tipo primario WPS / Wi-Fi Direct":v.wps.hasType?"Tipo primario WPS":"Tipo primario Wi-Fi Direct"};
  DeviceKind hint=DeviceKind::unknown;for(const char*s:{v.wps.model,v.wps.name,v.p2p.name})hint=mergeType(hint,nameHint(s,conflict),conflict);
  if(conflict)return {DeviceKind::unknown,"conflict","Nombres/modelos sugieren tipos diferentes"};
+ if(compatibleModel(v.wps.manufacturer,v.wps.model)||compatibleModel(v.wps.manufacturer,v.wps.number))return {DeviceKind::phone,"declared","Codigo de modelo WPS en catalogo documentado"};
  if(hint!=DeviceKind::unknown)return {hint,"hint","Palabra en nombre/modelo anunciado; puede ser falso"};
  if(v.source&AP)return {DeviceKind::ap,"role","Rol AP observado; no confirma router fisico"};
  return {};
+}
+inline DeviceClass classifyBle(const BleRecord&r){
+ if(r.modelConflict||r.companyConflict)return {DeviceKind::unknown,"conflict","Identificadores BLE contradictorios"};
+ if(r.value.model.format==3)return {DeviceKind::sensor,"role","Telemetria Ruuvi RAWv2; hardware emisor no confirmado"};
+ if(bleModelName(r.value.model)[0])return {r.value.model.format==1?DeviceKind::audio:DeviceKind::sensor,"declared","ID de producto del anuncio BLE; no autenticado"};
+ if(r.appearanceConflict)return {DeviceKind::unknown,"conflict","Appearance BLE contradictorio"};
+ if(r.value.hasAppearance){auto k=appearanceType(r.value.appearance);if(k!=DeviceKind::unknown)return {k,"declared","Appearance BLE anunciado; no autenticado"};}
+ bool conflict=false;auto k=nameHint(r.value.name,conflict);
+ if(conflict)return {DeviceKind::unknown,"conflict","Nombre BLE sugiere tipos diferentes"};
+ return k!=DeviceKind::unknown?DeviceClass{k,"hint","Palabra en nombre BLE; puede ser falso"}:DeviceClass{};
 }
 }
