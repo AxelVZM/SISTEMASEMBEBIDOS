@@ -16,7 +16,7 @@ bool initializeBleManual(){
  if(bleInitialized)return !bleInitFailed;
  bleInitialized=true;bleInitAt=millis();bleQueue=xQueueCreate(16,sizeof(BleEvent));if(!bleQueue){bleInitFailed=true;return false;}
  esp_bt_controller_mem_release(ESP_BT_MODE_CLASSIC_BT);
- esp_bt_controller_config_t cfg=BT_CONTROLLER_INIT_CONFIG_DEFAULT();esp_err_t err=esp_bt_controller_init(&cfg);
+ esp_bt_controller_config_t cfg=BT_CONTROLLER_INIT_CONFIG_DEFAULT();cfg.mode=ESP_BT_MODE_BLE;esp_err_t err=esp_bt_controller_init(&cfg);
  if(err==ESP_OK)err=esp_bt_controller_enable(ESP_BT_MODE_BLE);
  if(err==ESP_OK)err=esp_bluedroid_init();if(err==ESP_OK)err=esp_bluedroid_enable();if(err==ESP_OK)err=esp_ble_gap_register_callback(bleGap);
  esp_ble_scan_params_t params{};params.scan_type=BLE_SCAN_TYPE_PASSIVE;params.own_addr_type=BLE_ADDR_TYPE_PUBLIC;params.scan_filter_policy=BLE_SCAN_FILTER_ALLOW_ALL;params.scan_interval=0x80;params.scan_window=0x78;params.scan_duplicate=BLE_SCAN_DUPLICATE_DISABLE;

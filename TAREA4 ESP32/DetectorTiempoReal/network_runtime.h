@@ -65,7 +65,7 @@ String buildCloudPayload(uint32_t now){
  size_t clients=0,aps=0,sentClients=0,sentAps=0;
  for(size_t i=0;i<rowCount;i++)if(recent(now,rows[i].last)){if(rows[i].value.source&AP)aps++;else if(rows[i].value.source&CLIENT)clients++;}
  String s; s.reserve(18000);
- s="{\"version\":\"7.5\",\"sensor\":"+quote(macText(ownMac))+",\"ciclo_id\":"+quote(String(bootId)+"-"+String(++networkSequence))+",\"duracion_s\":60,\"total_detectado\":"+String(clients)+",\"routers\":"+String(aps)+",\"equipos_detectados\":[";
+ s="{\"version\":\"7.5.1\",\"sensor\":"+quote(macText(ownMac))+",\"ciclo_id\":"+quote(String(bootId)+"-"+String(++networkSequence))+",\"duracion_s\":60,\"total_detectado\":"+String(clients)+",\"routers\":"+String(aps)+",\"equipos_detectados\":[";
  for(size_t k=0;k<rowCount&&sentClients<24;k++){auto&r=rows[ids[k]];auto&v=r.value;if(!recent(now,r.last)||(v.source&AP)||!(v.source&CLIENT))continue;
  if(sentClients++)s+=',';
  s+="{\"mac\":"+quote(macText(v.mac))+",\"rssi\":"+String(int(r.ema))+",\"rssi_ultimo\":"+String(v.rssi)+",\"canal\":"+String(v.channel)+",\"paquetes\":"+String(1)+",\"visible_s\":0,\"tipo\":\"Cliente Wi-Fi\",\"fabricante_wps\":"+quote(r.wpsConflict?"":v.wps.manufacturer)+",\"modelo_wps\":"+quote(r.wpsConflict?"":v.wps.model)+",\"nombre_anunciado\":"+quote(v.p2p.name[0]?v.p2p.name:v.wps.name)+cloudClassJson(classifyWifi(r))+"}";
@@ -90,8 +90,8 @@ void finishNetwork(uint32_t now,const String &message){
 }
 void networkTick(uint32_t now){
  if(networkPhase==4){
-  if(networkCancel||now-networkAt>=10000){lanState="error";lanMessage="No se pudo conectar o se cancelo la busqueda";finishNetwork(now,lanMessage);return;}
-  if(WiFi.status()==WL_CONNECTED){networkPhase=5;lanState="scanning";lanMessage="Consultando mDNS y SSDP/UPnP (hasta 35 segundos)";if(ESP.getFreeHeap()<30000||xTaskCreate(lanWorker,"orbita_lan",8192,nullptr,1,nullptr)!=pdPASS){lanState="error";lanMessage="Sin memoria para busqueda LAN";finishNetwork(now,lanMessage);}}return;
+  if(networkCancel||now-networkAt>=10000){lanState="error";lanMessage=networkCancel?"Busqueda cancelada":"No se pudo conectar en 10 s. Revisa SSID/clave, red 2.4 GHz y canal 1-11. Estado WiFi="+String(int(WiFi.status()));finishNetwork(now,lanMessage);return;}
+  if(WiFi.status()==WL_CONNECTED){networkPhase=5;lanState="scanning";lanMessage=String("Conectado: ")+WiFi.localIP().toString()+". Buscando mDNS y SSDP/UPnP (hasta 35 s)";if(ESP.getFreeHeap()<30000||xTaskCreate(lanWorker,"orbita_lan",8192,nullptr,1,nullptr)!=pdPASS){lanState="error";lanMessage="Sin memoria para busqueda LAN";finishNetwork(now,lanMessage);}}return;
  }
  if(networkPhase==5){if(lanDone.load()){
   if(lanError.load()||networkCancel){lanState="error";lanMessage="Busqueda LAN no completada";lanCount=0;}

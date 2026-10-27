@@ -43,7 +43,7 @@ def validate_packet(p):
                 out[k]=p[k]
         out.update(kind=kind,b=p['b']);return out
     if kind=='status':
-        if p.get('firmware') not in ('7.0','7.1','7.2','7.3','7.4','7.5'):raise ValueError('Versión de firmware incompatible')
+        if p.get('firmware') not in ('7.0','7.1','7.2','7.3','7.4','7.5','7.5.1'):raise ValueError('Versión de firmware incompatible')
         bounds={'ms':0xffffffff,'wifi':96,'ble':32,'wifiKnown':96,'bleKnown':32,'aps':96,'clients':96,'channel':11,'heap':0xffffffff,'minHeap':0xffffffff,'logBytes':0xffffffff,'wifiOmitted':0xffffffff,'bleOmitted':0xffffffff,'rxOmitted':0xffffffff,'bleRxOmitted':0xffffffff}
         for k,hi in bounds.items():
             if not integer(p.get(k),1 if k=='channel' else 0,hi):raise ValueError('Estado inválido: '+k)
@@ -151,7 +151,7 @@ def create_app(config=None):
     @app.get('/wifi_catalog.json')
     def catalog():return send_from_directory(web,'wifi_catalog.json')
     @app.get('/api/health')
-    def health():return jsonify(ok=True,version='ec2-1',firmware='7.5')
+    def health():return jsonify(ok=True,version='ec2-1',firmware='7.5.1')
     @app.post('/api/ingest')
     @auth
     def ingest():

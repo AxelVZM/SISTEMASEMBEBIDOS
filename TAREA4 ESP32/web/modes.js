@@ -26,13 +26,14 @@
   if(meta&&session!==meta.b){bleRows.clear();lanRows.clear();session=meta.b;scan=null;}
   if(meta&&scan!==meta.lanScan){lanRows.clear();scan=meta.lanScan;}
   if(pending&&performance.now()-pendingAt>10000){pending=false;notice='Sin confirmación. Revisa el estado de la placa antes de reintentar.';if(commandType==='lan_scan')lanFeedback=notice;}
-  const live=fresh(),selected=!!meta?.bleSelected,local=connected&&!demo&&!window.orbitaEC2?.remote&&live&&['7.4','7.5'].includes(meta?.firmware),busy=!!meta?.netPaused||pending||!!transfer;
+  const live=fresh(),selected=!!meta?.bleSelected,local=connected&&!demo&&!window.orbitaEC2?.remote&&live&&['7.4','7.5','7.5.1'].includes(meta?.firmware),busy=!!meta?.netPaused||pending||!!transfer;
   el('bleActivate').disabled=!local||busy||selected;el('bleDeactivate').disabled=!local||busy||!selected;el('lanDiscover').disabled=!local||busy||selected;
   el('modeLabel').textContent=!live?'Sin telemetría reciente':meta.radio==='BLE'?'BLE seleccionado · Wi-Fi en pausa':meta.radio==='Red'?'Red local / conexión · escucha en pausa':'Wi-Fi activo · Bluetooth sin escanear';
   for(const card of document.querySelectorAll('[data-mode-card]'))card.classList.toggle('selected',live&&card.dataset.modeCard===(meta.radio==='BLE'?'ble':meta.radio==='Red'?'lan':'wifi'));
-  el('bleState').textContent=notice||(!live?'Conecta USB con firmware 7.4/7.5 para activar.':selected?(meta.bleReady?'Escaneando anuncios BLE. Wi-Fi se reanudará al desactivar.':'Inicializando Bluetooth…'):'BLE desactivado. Abrir este apartado no inicia el escaneo.');
+  const blocked=!connected?'Conecta el ESP32 por USB para activar los controles.':window.orbitaEC2?.remote?'La vista remota es de solo lectura; conecta USB para controlar la placa.':!live?'Sin telemetría reciente; revisa USB.':!local?'Actualiza el firmware de la placa.':'';
+  el('bleState').textContent=meta?.bleError?('Error BLE: '+meta.bleError):blocked||notice||(!live?'Conecta USB con firmware 7.4/7.5 para activar.':selected?(meta.bleReady?'Escaneando anuncios BLE. Wi-Fi se reanudará al desactivar.':'Inicializando Bluetooth…'):'BLE desactivado. Abrir este apartado no inicia el escaneo.');
   el('bleObserved').textContent=live?String(meta.ble):'—';el('bleModeBadge').textContent=selected?'Modo seleccionado':'Apagado';
-  el('lanState').textContent=lanFeedback||meta?.lanMessage||'Configura tu red de 2,4 GHz y pulsa Buscar servicios.';
+  el('lanState').textContent=blocked||(meta?.lanState==='error'?meta.lanMessage:lanFeedback||meta?.lanMessage)||'Configura tu red de 2,4 GHz y pulsa Buscar servicios.';
   el('lanObserved').textContent=meta?.lanState==='done'?String(meta.lanCount):'—';
   const rows=[...bleRows.values()].sort((a,b)=>b.rssi-a.rssi);
   el('bleRows').innerHTML=rows.length?rows.map(r=>`<tr><td><strong>${esc(r.name||'Sin nombre anunciado')}</strong><br><small>${esc(r.mac)} · ${esc(['Pública','Aleatoria','Identidad pública','Identidad aleatoria'][r.addressType])}</small></td><td>${esc(r.brand||'No determinada')}<br><small>${esc(r.deviceLabel||'Tipo sin determinar')} · ${esc(r.classLevel||'unknown')}</small><br><small>Titular SIG: ${esc(r.company)}</small></td><td><strong>${esc(r.modelConflict?'Sin determinar: conflicto':r.model||'Sin determinar')}</strong><br><small>${r.model?'Modelo anunciado; no autenticado':'Sin ID compatible'}</small></td><td>${esc(r.modelSource||'Sin decoder')}<br><small>ID ${esc(r.modelId||'—')}${r.encrypted?' · datos de medición cifrados':''}</small></td><td>${r.rssi.toFixed(1)} dBm</td><td>${esc(ago(r))}<br><small>${live&&selected&&recent(r)?'Recepción reciente':'Histórico; sin confirmar presencia'}</small></td></tr>`).join(''):'<tr><td colspan="6" class="empty">Activa BLE para recibir anuncios. No todos los aparatos anuncian un modelo.</td></tr>';
@@ -40,7 +41,7 @@
  }
  el('bleActivate').onclick=()=>command({cmd:'ble_set',enabled:true});el('bleDeactivate').onclick=()=>command({cmd:'ble_set',enabled:false});
  el('lanDiscover').onclick=async()=>{await command({cmd:'lan_scan'});};
- el('lanConfigure').onclick=()=>{el('secondarySettings').open=true;el('networkSettings').open=true;el('networkSettings').scrollIntoView({behavior:'smooth'});el('netSsid').focus();};
+ el('lanConfigure').onclick=()=>{setView('explorer');el('networkSettings').open=true;el('networkSettings').scrollIntoView({behavior:'smooth'});el('netSsid').focus();};
  el('bleExport').onclick=()=>downloadCsv([['MAC observada','Tipo direccion','Nombre','Titular SIG','Marca anunciada','Modelo anunciado','ID modelo','Fuente','RSSI','Ultima recepcion ms'],...[...bleRows.values()].map(r=>[r.mac,r.addressType,r.name,r.company,r.brand,r.modelConflict?'':r.model,r.modelId,r.modelSource,r.rssi,r.last])],'observaciones_ble.csv');
  el('lanExport').onclick=()=>downloadCsv([['Busqueda','Nombre','Host','IP','Puerto','Servicio','Marca anunciada','Modelo anunciado','Evidencia','Tipo','Nivel','Evidencia tipo','Codigo','Modelo catalogo'],...[...lanRows.values()].filter(r=>r.scan===meta?.lanScan).map(r=>[r.scan,r.name,r.host,r.ip,r.port,r.service,r.brand,r.model,r.evidence,r.deviceLabel,r.classLevel,r.classEvidence,r.modelCode,r.resolvedModel])],'servicios_lan.csv');
  window.orbitaModes={accept,render,reset,status:()=>{if(pending&&meta?.lanState&&['connecting','scanning'].includes(meta.lanState)){pending=false;notice='';lanFeedback='';}render();}};

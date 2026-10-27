@@ -9,11 +9,11 @@ using esp_err_t=int;using esp_gap_ble_cb_event_t=int;
 constexpr int ESP_OK=0,ESP_BT_STATUS_SUCCESS=0,ESP_GAP_BLE_SCAN_PARAM_SET_COMPLETE_EVT=1,ESP_GAP_BLE_SCAN_START_COMPLETE_EVT=2,ESP_GAP_BLE_SCAN_STOP_COMPLETE_EVT=3,ESP_GAP_BLE_SCAN_RESULT_EVT=4,ESP_GAP_SEARCH_INQ_CMPL_EVT=5,ESP_GAP_SEARCH_INQ_RES_EVT=6;
 constexpr int ESP_BT_MODE_CLASSIC_BT=0,ESP_BT_MODE_BLE=1,BLE_SCAN_TYPE_PASSIVE=0,BLE_ADDR_TYPE_PUBLIC=0,BLE_SCAN_FILTER_ALLOW_ALL=0,BLE_SCAN_DUPLICATE_DISABLE=0,pdTRUE=1;
 struct esp_ble_gap_cb_param_t {struct{int status=0;}scan_param_cmpl,scan_start_cmpl,scan_stop_cmpl;struct{int search_evt=0;uint8_t bda[6]{},ble_addr_type=0,ble_adv[31]{};int8_t rssi=0;size_t adv_data_len=0;}scan_rst;};
-struct esp_bt_controller_config_t{};
+struct esp_bt_controller_config_t{int mode=3;};
 #define BT_CONTROLLER_INIT_CONFIG_DEFAULT() esp_bt_controller_config_t{}
 struct esp_ble_scan_params_t{int scan_type,own_addr_type,scan_filter_policy,scan_interval,scan_window,scan_duplicate;};
 void(*callback)(int,esp_ble_gap_cb_param_t*)=nullptr;int starts=0,stops=0,inits=0;bool fakeStartFailure=false,busy=false;uint32_t fakeNow=0;
-int esp_bt_controller_mem_release(int){return 0;}int esp_bt_controller_init(esp_bt_controller_config_t*){inits++;return 0;}int esp_bt_controller_enable(int){return 0;}int esp_bluedroid_init(){return 0;}int esp_bluedroid_enable(){return 0;}int esp_ble_gap_register_callback(void(*cb)(int,esp_ble_gap_cb_param_t*)){callback=cb;return 0;}
+int esp_bt_controller_mem_release(int){return 0;}int esp_bt_controller_init(esp_bt_controller_config_t*cfg){assert(cfg->mode==ESP_BT_MODE_BLE);inits++;return 0;}int esp_bt_controller_enable(int){return 0;}int esp_bluedroid_init(){return 0;}int esp_bluedroid_enable(){return 0;}int esp_ble_gap_register_callback(void(*cb)(int,esp_ble_gap_cb_param_t*)){callback=cb;return 0;}
 int esp_ble_gap_set_scan_params(esp_ble_scan_params_t*){esp_ble_gap_cb_param_t p;callback(1,&p);return 0;}
 int esp_ble_gap_start_scanning(int seconds){assert(seconds==2);starts++;if(fakeStartFailure)return -1;esp_ble_gap_cb_param_t p;callback(2,&p);return 0;}
 int esp_ble_gap_stop_scanning(){stops++;return 0;}const char*esp_err_to_name(int){return "test error";}
