@@ -1,0 +1,10 @@
+CORRECCIÓN DE PAÍS CONSERVADA EN 2.1.0
+Causa observada en la placa: wifi_country devuelve ESP_ERR_INVALID_ARG (0x102), antes de iniciar Wi-Fi y Bluetooth.
+La versión previa construía manualmente una configuración cc=PE, no incluida entre los códigos soportados documentados en ESP-IDF 5.4.2.
+Se sustituye esa construcción por esp_wifi_set_country_code("01", false): perfil world-safe del controlador, sin adopción automática 802.11d y con escaneo existente limitado a 1..11.
+Se conserva Wi-Fi/BLE/Classic, el planificador, los límites de recuperación y el diagnóstico. No se modifica backend ni diseño HTML en esta corrección.
+Compilación idf.py build: correcta. Falta confirmar en la placa la inicialización y varios ciclos de escaneo; no se afirma prueba física.
+Carga el binario combinado firmware/prebuilt/esp32-detector.bin desde 0x0, con el backend cerrado para liberar COM6.
+Desconecta/reconecta la alimentación una vez tras cargar para borrar la racha RTC de errores anteriores. Abre INICIAR.bat y comprueba versión 2.1.0.
+Si hay otro error, copia el nuevo primer mensaje mod=... op=... de Diagnóstico.
+Referencia: https://docs.espressif.com/projects/esp-idf/en/v5.4.2/esp32/api-reference/network/esp_wifi.html#_CPPv425esp_wifi_set_country_codePKcb

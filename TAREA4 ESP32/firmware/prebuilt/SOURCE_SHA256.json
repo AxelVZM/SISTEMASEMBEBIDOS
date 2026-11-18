@@ -1,0 +1,12 @@
+{
+  "firmware/CMakeLists.txt": "3be1812887d6bc6d2ec02ab985cb1d93af814566360aa59c4caaed3014d78f17",
+  "firmware/sdkconfig.defaults": "9fa85281fa9c3b6c4550b6f41551404935f8267b2757e46a54b49865971ee704",
+  "firmware/partitions.csv": "856d64dc7f307246235a5269e24299d5f6264c0fec08d5945a544d84dcfd70ba",
+  "firmware/main/CMakeLists.txt": "5d741b460ed5c4ba2105cc3db8c12034af04d97e2f912b306344c22123407d06",
+  "firmware/main/main.c": "96d955afd80c11a3fc03a9ce335a713b522de86d785218706a56997ea3edd57b",
+  "firmware/main/recovery_policy.h": "fca004cf6cde117de0f665153c71a53387970e5244c3b50264237b784b1c6941",
+  "firmware/main/wifi_header.c": "61d0fc1e49a0e960b6f55dc7ceb550764a9032a988e9b3a9f41098bd77a9d39f",
+  "firmware/main/wifi_header.h": "3dc8c17fc37bcc897bf822655016d01a27f8cd729d7c6de75937a9bf7ea0fee6",
+  "firmware/main/wifi_metadata.c": "be6a4fde570655df8bc9af53e7b7a1825bcda99ade04e151f6947a345ebbe215",
+  "firmware/main/wifi_metadata.h": "28fce86edf909fe705528ec25c400a11becf11b01379ce6a1aac7f148687013f"
+}

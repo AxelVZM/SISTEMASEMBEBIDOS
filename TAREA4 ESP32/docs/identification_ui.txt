@@ -1,0 +1,1 @@
+PASS: Honor AP sin tipo inventado, ZTE router WPS, Laptop BLE, filtros de rol/tipo, confianza, CSV y BLE activo opcional; sin errores JS.

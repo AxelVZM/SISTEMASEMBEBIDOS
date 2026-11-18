@@ -1,0 +1,1716 @@
+{
+  "source": "https://bitbucket.org/bluetooth-SIG/public/raw/main/assigned_numbers/core/appearance_values.yaml",
+  "source_sha256": "0341ff695f2d8aaee13a36fc7ef4cf671196455c1b1020363267786ad8fb038a",
+  "entries": {
+    "0": {
+      "name": "Generic Unknown",
+      "category": "Desconocido",
+      "specific": false
+    },
+    "64": {
+      "name": "Generic Phone",
+      "category": "Teléfono",
+      "specific": false
+    },
+    "128": {
+      "name": "Generic Computer",
+      "category": "Computadora",
+      "specific": false
+    },
+    "129": {
+      "name": "Desktop Workstation",
+      "category": "Computadora",
+      "specific": true
+    },
+    "130": {
+      "name": "Server-class Computer",
+      "category": "Computadora",
+      "specific": true
+    },
+    "131": {
+      "name": "Laptop",
+      "category": "Laptop",
+      "specific": true
+    },
+    "132": {
+      "name": "Handheld PC/PDA (clamshell)",
+      "category": "Computadora",
+      "specific": true
+    },
+    "133": {
+      "name": "Palm-size PC/PDA",
+      "category": "Computadora",
+      "specific": true
+    },
+    "134": {
+      "name": "Wearable computer (watch size)",
+      "category": "Computadora",
+      "specific": true
+    },
+    "135": {
+      "name": "Tablet",
+      "category": "Tablet",
+      "specific": true
+    },
+    "136": {
+      "name": "Docking Station",
+      "category": "Computadora",
+      "specific": true
+    },
+    "137": {
+      "name": "All in One",
+      "category": "Computadora",
+      "specific": true
+    },
+    "138": {
+      "name": "Blade Server",
+      "category": "Computadora",
+      "specific": true
+    },
+    "139": {
+      "name": "Convertible",
+      "category": "Computadora convertible",
+      "specific": true
+    },
+    "140": {
+      "name": "Detachable",
+      "category": "Computadora",
+      "specific": true
+    },
+    "141": {
+      "name": "IoT Gateway",
+      "category": "Computadora",
+      "specific": true
+    },
+    "142": {
+      "name": "Mini PC",
+      "category": "Computadora",
+      "specific": true
+    },
+    "143": {
+      "name": "Stick PC",
+      "category": "Computadora",
+      "specific": true
+    },
+    "192": {
+      "name": "Generic Watch",
+      "category": "Reloj",
+      "specific": false
+    },
+    "193": {
+      "name": "Sports Watch",
+      "category": "Reloj deportivo",
+      "specific": true
+    },
+    "194": {
+      "name": "Smartwatch",
+      "category": "Reloj inteligente",
+      "specific": true
+    },
+    "256": {
+      "name": "Generic Clock",
+      "category": "Reloj",
+      "specific": false
+    },
+    "320": {
+      "name": "Generic Display",
+      "category": "Pantalla",
+      "specific": false
+    },
+    "384": {
+      "name": "Generic Remote Control",
+      "category": "Control remoto",
+      "specific": false
+    },
+    "448": {
+      "name": "Generic Eye-glasses",
+      "category": "Gafas electrónicas",
+      "specific": false
+    },
+    "512": {
+      "name": "Generic Tag",
+      "category": "Etiqueta electrónica",
+      "specific": false
+    },
+    "576": {
+      "name": "Generic Keyring",
+      "category": "Llavero electrónico",
+      "specific": false
+    },
+    "640": {
+      "name": "Generic Media Player",
+      "category": "Reproductor multimedia",
+      "specific": false
+    },
+    "704": {
+      "name": "Generic Barcode Scanner",
+      "category": "Lector de códigos",
+      "specific": false
+    },
+    "768": {
+      "name": "Generic Thermometer",
+      "category": "Termómetro",
+      "specific": false
+    },
+    "769": {
+      "name": "Ear Thermometer",
+      "category": "Termómetro",
+      "specific": true
+    },
+    "832": {
+      "name": "Generic Heart Rate Sensor",
+      "category": "Sensor cardíaco",
+      "specific": false
+    },
+    "833": {
+      "name": "Heart Rate Belt",
+      "category": "Sensor cardíaco",
+      "specific": true
+    },
+    "896": {
+      "name": "Generic Blood Pressure",
+      "category": "Medidor de presión",
+      "specific": false
+    },
+    "897": {
+      "name": "Arm Blood Pressure",
+      "category": "Medidor de presión",
+      "specific": true
+    },
+    "898": {
+      "name": "Wrist Blood Pressure",
+      "category": "Medidor de presión",
+      "specific": true
+    },
+    "960": {
+      "name": "Generic Human Interface Device",
+      "category": "Dispositivo de entrada",
+      "specific": false
+    },
+    "961": {
+      "name": "Keyboard",
+      "category": "Teclado",
+      "specific": true
+    },
+    "962": {
+      "name": "Mouse",
+      "category": "Ratón",
+      "specific": true
+    },
+    "963": {
+      "name": "Joystick",
+      "category": "Joystick",
+      "specific": true
+    },
+    "964": {
+      "name": "Gamepad",
+      "category": "Control de videojuegos",
+      "specific": true
+    },
+    "965": {
+      "name": "Digitizer Tablet",
+      "category": "Tableta digitalizadora",
+      "specific": true
+    },
+    "966": {
+      "name": "Card Reader",
+      "category": "Dispositivo de entrada",
+      "specific": true
+    },
+    "967": {
+      "name": "Digital Pen",
+      "category": "Dispositivo de entrada",
+      "specific": true
+    },
+    "968": {
+      "name": "Barcode Scanner",
+      "category": "Dispositivo de entrada",
+      "specific": true
+    },
+    "969": {
+      "name": "Touchpad",
+      "category": "Panel táctil",
+      "specific": true
+    },
+    "970": {
+      "name": "Presentation Remote",
+      "category": "Dispositivo de entrada",
+      "specific": true
+    },
+    "1024": {
+      "name": "Generic Glucose Meter",
+      "category": "Medidor de glucosa",
+      "specific": false
+    },
+    "1088": {
+      "name": "Generic Running Walking Sensor",
+      "category": "Sensor de actividad",
+      "specific": false
+    },
+    "1089": {
+      "name": "In-Shoe Running Walking Sensor",
+      "category": "Sensor de actividad",
+      "specific": true
+    },
+    "1090": {
+      "name": "On-Shoe Running Walking Sensor",
+      "category": "Sensor de actividad",
+      "specific": true
+    },
+    "1091": {
+      "name": "On-Hip Running Walking Sensor",
+      "category": "Sensor de actividad",
+      "specific": true
+    },
+    "1152": {
+      "name": "Generic Cycling",
+      "category": "Equipo de ciclismo",
+      "specific": false
+    },
+    "1153": {
+      "name": "Cycling Computer",
+      "category": "Equipo de ciclismo",
+      "specific": true
+    },
+    "1154": {
+      "name": "Speed Sensor",
+      "category": "Equipo de ciclismo",
+      "specific": true
+    },
+    "1155": {
+      "name": "Cadence Sensor",
+      "category": "Equipo de ciclismo",
+      "specific": true
+    },
+    "1156": {
+      "name": "Power Sensor",
+      "category": "Equipo de ciclismo",
+      "specific": true
+    },
+    "1157": {
+      "name": "Speed and Cadence Sensor",
+      "category": "Equipo de ciclismo",
+      "specific": true
+    },
+    "1216": {
+      "name": "Generic Control Device",
+      "category": "Dispositivo de control",
+      "specific": false
+    },
+    "1217": {
+      "name": "Switch",
+      "category": "Dispositivo de control",
+      "specific": true
+    },
+    "1218": {
+      "name": "Multi-switch",
+      "category": "Dispositivo de control",
+      "specific": true
+    },
+    "1219": {
+      "name": "Button",
+      "category": "Dispositivo de control",
+      "specific": true
+    },
+    "1220": {
+      "name": "Slider",
+      "category": "Dispositivo de control",
+      "specific": true
+    },
+    "1221": {
+      "name": "Rotary Switch",
+      "category": "Dispositivo de control",
+      "specific": true
+    },
+    "1222": {
+      "name": "Touch Panel",
+      "category": "Dispositivo de control",
+      "specific": true
+    },
+    "1223": {
+      "name": "Single Switch",
+      "category": "Dispositivo de control",
+      "specific": true
+    },
+    "1224": {
+      "name": "Double Switch",
+      "category": "Dispositivo de control",
+      "specific": true
+    },
+    "1225": {
+      "name": "Triple Switch",
+      "category": "Dispositivo de control",
+      "specific": true
+    },
+    "1226": {
+      "name": "Battery Switch",
+      "category": "Dispositivo de control",
+      "specific": true
+    },
+    "1227": {
+      "name": "Energy Harvesting Switch",
+      "category": "Dispositivo de control",
+      "specific": true
+    },
+    "1228": {
+      "name": "Push Button",
+      "category": "Dispositivo de control",
+      "specific": true
+    },
+    "1229": {
+      "name": "Dial",
+      "category": "Dispositivo de control",
+      "specific": true
+    },
+    "1280": {
+      "name": "Generic Network Device",
+      "category": "Dispositivo de red",
+      "specific": false
+    },
+    "1281": {
+      "name": "Access Point",
+      "category": "Dispositivo de red",
+      "specific": true
+    },
+    "1282": {
+      "name": "Mesh Device",
+      "category": "Dispositivo de red",
+      "specific": true
+    },
+    "1283": {
+      "name": "Mesh Network Proxy",
+      "category": "Dispositivo de red",
+      "specific": true
+    },
+    "1344": {
+      "name": "Generic Sensor",
+      "category": "Sensor",
+      "specific": false
+    },
+    "1345": {
+      "name": "Motion Sensor",
+      "category": "Sensor",
+      "specific": true
+    },
+    "1346": {
+      "name": "Air quality Sensor",
+      "category": "Sensor",
+      "specific": true
+    },
+    "1347": {
+      "name": "Temperature Sensor",
+      "category": "Sensor",
+      "specific": true
+    },
+    "1348": {
+      "name": "Humidity Sensor",
+      "category": "Sensor",
+      "specific": true
+    },
+    "1349": {
+      "name": "Leak Sensor",
+      "category": "Sensor",
+      "specific": true
+    },
+    "1350": {
+      "name": "Smoke Sensor",
+      "category": "Sensor",
+      "specific": true
+    },
+    "1351": {
+      "name": "Occupancy Sensor",
+      "category": "Sensor",
+      "specific": true
+    },
+    "1352": {
+      "name": "Contact Sensor",
+      "category": "Sensor",
+      "specific": true
+    },
+    "1353": {
+      "name": "Carbon Monoxide Sensor",
+      "category": "Sensor",
+      "specific": true
+    },
+    "1354": {
+      "name": "Carbon Dioxide Sensor",
+      "category": "Sensor",
+      "specific": true
+    },
+    "1355": {
+      "name": "Ambient Light Sensor",
+      "category": "Sensor",
+      "specific": true
+    },
+    "1356": {
+      "name": "Energy Sensor",
+      "category": "Sensor",
+      "specific": true
+    },
+    "1357": {
+      "name": "Color Light Sensor",
+      "category": "Sensor",
+      "specific": true
+    },
+    "1358": {
+      "name": "Rain Sensor",
+      "category": "Sensor",
+      "specific": true
+    },
+    "1359": {
+      "name": "Fire Sensor",
+      "category": "Sensor",
+      "specific": true
+    },
+    "1360": {
+      "name": "Wind Sensor",
+      "category": "Sensor",
+      "specific": true
+    },
+    "1361": {
+      "name": "Proximity Sensor",
+      "category": "Sensor",
+      "specific": true
+    },
+    "1362": {
+      "name": "Multi-Sensor",
+      "category": "Sensor",
+      "specific": true
+    },
+    "1363": {
+      "name": "Flush Mounted Sensor",
+      "category": "Sensor",
+      "specific": true
+    },
+    "1364": {
+      "name": "Ceiling Mounted Sensor",
+      "category": "Sensor",
+      "specific": true
+    },
+    "1365": {
+      "name": "Wall Mounted Sensor",
+      "category": "Sensor",
+      "specific": true
+    },
+    "1366": {
+      "name": "Multisensor",
+      "category": "Sensor",
+      "specific": true
+    },
+    "1367": {
+      "name": "Energy Meter",
+      "category": "Sensor",
+      "specific": true
+    },
+    "1368": {
+      "name": "Flame Detector",
+      "category": "Sensor",
+      "specific": true
+    },
+    "1369": {
+      "name": "Vehicle Tire Pressure Sensor",
+      "category": "Sensor",
+      "specific": true
+    },
+    "1408": {
+      "name": "Generic Light Fixtures",
+      "category": "Iluminación",
+      "specific": false
+    },
+    "1409": {
+      "name": "Wall Light",
+      "category": "Iluminación",
+      "specific": true
+    },
+    "1410": {
+      "name": "Ceiling Light",
+      "category": "Iluminación",
+      "specific": true
+    },
+    "1411": {
+      "name": "Floor Light",
+      "category": "Iluminación",
+      "specific": true
+    },
+    "1412": {
+      "name": "Cabinet Light",
+      "category": "Iluminación",
+      "specific": true
+    },
+    "1413": {
+      "name": "Desk Light",
+      "category": "Iluminación",
+      "specific": true
+    },
+    "1414": {
+      "name": "Troffer Light",
+      "category": "Iluminación",
+      "specific": true
+    },
+    "1415": {
+      "name": "Pendant Light",
+      "category": "Iluminación",
+      "specific": true
+    },
+    "1416": {
+      "name": "In-ground Light",
+      "category": "Iluminación",
+      "specific": true
+    },
+    "1417": {
+      "name": "Flood Light",
+      "category": "Iluminación",
+      "specific": true
+    },
+    "1418": {
+      "name": "Underwater Light",
+      "category": "Iluminación",
+      "specific": true
+    },
+    "1419": {
+      "name": "Bollard with Light",
+      "category": "Iluminación",
+      "specific": true
+    },
+    "1420": {
+      "name": "Pathway Light",
+      "category": "Iluminación",
+      "specific": true
+    },
+    "1421": {
+      "name": "Garden Light",
+      "category": "Iluminación",
+      "specific": true
+    },
+    "1422": {
+      "name": "Pole-top Light",
+      "category": "Iluminación",
+      "specific": true
+    },
+    "1423": {
+      "name": "Spotlight",
+      "category": "Iluminación",
+      "specific": true
+    },
+    "1424": {
+      "name": "Linear Light",
+      "category": "Iluminación",
+      "specific": true
+    },
+    "1425": {
+      "name": "Street Light",
+      "category": "Iluminación",
+      "specific": true
+    },
+    "1426": {
+      "name": "Shelves Light",
+      "category": "Iluminación",
+      "specific": true
+    },
+    "1427": {
+      "name": "Bay Light",
+      "category": "Iluminación",
+      "specific": true
+    },
+    "1428": {
+      "name": "Emergency Exit Light",
+      "category": "Iluminación",
+      "specific": true
+    },
+    "1429": {
+      "name": "Light Controller",
+      "category": "Iluminación",
+      "specific": true
+    },
+    "1430": {
+      "name": "Light Driver",
+      "category": "Iluminación",
+      "specific": true
+    },
+    "1431": {
+      "name": "Bulb",
+      "category": "Iluminación",
+      "specific": true
+    },
+    "1432": {
+      "name": "Low-bay Light",
+      "category": "Iluminación",
+      "specific": true
+    },
+    "1433": {
+      "name": "High-bay Light",
+      "category": "Iluminación",
+      "specific": true
+    },
+    "1472": {
+      "name": "Generic Fan",
+      "category": "Ventilador",
+      "specific": false
+    },
+    "1473": {
+      "name": "Ceiling Fan",
+      "category": "Ventilador",
+      "specific": true
+    },
+    "1474": {
+      "name": "Axial Fan",
+      "category": "Ventilador",
+      "specific": true
+    },
+    "1475": {
+      "name": "Exhaust Fan",
+      "category": "Ventilador",
+      "specific": true
+    },
+    "1476": {
+      "name": "Pedestal Fan",
+      "category": "Ventilador",
+      "specific": true
+    },
+    "1477": {
+      "name": "Desk Fan",
+      "category": "Ventilador",
+      "specific": true
+    },
+    "1478": {
+      "name": "Wall Fan",
+      "category": "Ventilador",
+      "specific": true
+    },
+    "1536": {
+      "name": "Generic HVAC",
+      "category": "Climatización",
+      "specific": false
+    },
+    "1537": {
+      "name": "Thermostat",
+      "category": "Climatización",
+      "specific": true
+    },
+    "1538": {
+      "name": "Humidifier",
+      "category": "Climatización",
+      "specific": true
+    },
+    "1539": {
+      "name": "De-humidifier",
+      "category": "Climatización",
+      "specific": true
+    },
+    "1540": {
+      "name": "Heater",
+      "category": "Climatización",
+      "specific": true
+    },
+    "1541": {
+      "name": "Radiator",
+      "category": "Climatización",
+      "specific": true
+    },
+    "1542": {
+      "name": "Boiler",
+      "category": "Climatización",
+      "specific": true
+    },
+    "1543": {
+      "name": "Heat Pump",
+      "category": "Climatización",
+      "specific": true
+    },
+    "1544": {
+      "name": "Infrared Heater",
+      "category": "Climatización",
+      "specific": true
+    },
+    "1545": {
+      "name": "Radiant Panel Heater",
+      "category": "Climatización",
+      "specific": true
+    },
+    "1546": {
+      "name": "Fan Heater",
+      "category": "Climatización",
+      "specific": true
+    },
+    "1547": {
+      "name": "Air Curtain",
+      "category": "Climatización",
+      "specific": true
+    },
+    "1600": {
+      "name": "Generic Air Conditioning",
+      "category": "Aire acondicionado",
+      "specific": false
+    },
+    "1664": {
+      "name": "Generic Humidifier",
+      "category": "Humidificador",
+      "specific": false
+    },
+    "1728": {
+      "name": "Generic Heating",
+      "category": "Calefacción",
+      "specific": false
+    },
+    "1729": {
+      "name": "Radiator",
+      "category": "Calefacción",
+      "specific": true
+    },
+    "1730": {
+      "name": "Boiler",
+      "category": "Calefacción",
+      "specific": true
+    },
+    "1731": {
+      "name": "Heat Pump",
+      "category": "Calefacción",
+      "specific": true
+    },
+    "1732": {
+      "name": "Infrared Heater",
+      "category": "Calefacción",
+      "specific": true
+    },
+    "1733": {
+      "name": "Radiant Panel Heater",
+      "category": "Calefacción",
+      "specific": true
+    },
+    "1734": {
+      "name": "Fan Heater",
+      "category": "Calefacción",
+      "specific": true
+    },
+    "1735": {
+      "name": "Air Curtain",
+      "category": "Calefacción",
+      "specific": true
+    },
+    "1792": {
+      "name": "Generic Access Control",
+      "category": "Control de acceso",
+      "specific": false
+    },
+    "1793": {
+      "name": "Access Door",
+      "category": "Control de acceso",
+      "specific": true
+    },
+    "1794": {
+      "name": "Garage Door",
+      "category": "Control de acceso",
+      "specific": true
+    },
+    "1795": {
+      "name": "Emergency Exit Door",
+      "category": "Control de acceso",
+      "specific": true
+    },
+    "1796": {
+      "name": "Access Lock",
+      "category": "Control de acceso",
+      "specific": true
+    },
+    "1797": {
+      "name": "Elevator",
+      "category": "Control de acceso",
+      "specific": true
+    },
+    "1798": {
+      "name": "Window",
+      "category": "Control de acceso",
+      "specific": true
+    },
+    "1799": {
+      "name": "Entrance Gate",
+      "category": "Control de acceso",
+      "specific": true
+    },
+    "1800": {
+      "name": "Door Lock",
+      "category": "Control de acceso",
+      "specific": true
+    },
+    "1801": {
+      "name": "Locker",
+      "category": "Control de acceso",
+      "specific": true
+    },
+    "1856": {
+      "name": "Generic Motorized Device",
+      "category": "Dispositivo motorizado",
+      "specific": false
+    },
+    "1857": {
+      "name": "Motorized Gate",
+      "category": "Dispositivo motorizado",
+      "specific": true
+    },
+    "1858": {
+      "name": "Awning",
+      "category": "Dispositivo motorizado",
+      "specific": true
+    },
+    "1859": {
+      "name": "Blinds or Shades",
+      "category": "Dispositivo motorizado",
+      "specific": true
+    },
+    "1860": {
+      "name": "Curtains",
+      "category": "Dispositivo motorizado",
+      "specific": true
+    },
+    "1861": {
+      "name": "Screen",
+      "category": "Dispositivo motorizado",
+      "specific": true
+    },
+    "1920": {
+      "name": "Generic Power Device",
+      "category": "Equipo de energía",
+      "specific": false
+    },
+    "1921": {
+      "name": "Power Outlet",
+      "category": "Equipo de energía",
+      "specific": true
+    },
+    "1922": {
+      "name": "Power Strip",
+      "category": "Equipo de energía",
+      "specific": true
+    },
+    "1923": {
+      "name": "Plug",
+      "category": "Equipo de energía",
+      "specific": true
+    },
+    "1924": {
+      "name": "Power Supply",
+      "category": "Equipo de energía",
+      "specific": true
+    },
+    "1925": {
+      "name": "LED Driver",
+      "category": "Equipo de energía",
+      "specific": true
+    },
+    "1926": {
+      "name": "Fluorescent Lamp Gear",
+      "category": "Equipo de energía",
+      "specific": true
+    },
+    "1927": {
+      "name": "HID Lamp Gear",
+      "category": "Equipo de energía",
+      "specific": true
+    },
+    "1928": {
+      "name": "Charge Case",
+      "category": "Equipo de energía",
+      "specific": true
+    },
+    "1929": {
+      "name": "Power Bank",
+      "category": "Equipo de energía",
+      "specific": true
+    },
+    "1984": {
+      "name": "Generic Light Source",
+      "category": "Fuente de luz",
+      "specific": false
+    },
+    "1985": {
+      "name": "Incandescent Light Bulb",
+      "category": "Fuente de luz",
+      "specific": true
+    },
+    "1986": {
+      "name": "LED Lamp",
+      "category": "Fuente de luz",
+      "specific": true
+    },
+    "1987": {
+      "name": "HID Lamp",
+      "category": "Fuente de luz",
+      "specific": true
+    },
+    "1988": {
+      "name": "Fluorescent Lamp",
+      "category": "Fuente de luz",
+      "specific": true
+    },
+    "1989": {
+      "name": "LED Array",
+      "category": "Fuente de luz",
+      "specific": true
+    },
+    "1990": {
+      "name": "Multi-Color LED Array",
+      "category": "Fuente de luz",
+      "specific": true
+    },
+    "1991": {
+      "name": "Low voltage halogen",
+      "category": "Fuente de luz",
+      "specific": true
+    },
+    "1992": {
+      "name": "Organic light emitting diode (OLED)",
+      "category": "Fuente de luz",
+      "specific": true
+    },
+    "2048": {
+      "name": "Generic Window Covering",
+      "category": "Control de ventanas",
+      "specific": false
+    },
+    "2049": {
+      "name": "Window Shades",
+      "category": "Control de ventanas",
+      "specific": true
+    },
+    "2050": {
+      "name": "Window Blinds",
+      "category": "Control de ventanas",
+      "specific": true
+    },
+    "2051": {
+      "name": "Window Awning",
+      "category": "Control de ventanas",
+      "specific": true
+    },
+    "2052": {
+      "name": "Window Curtain",
+      "category": "Control de ventanas",
+      "specific": true
+    },
+    "2053": {
+      "name": "Exterior Shutter",
+      "category": "Control de ventanas",
+      "specific": true
+    },
+    "2054": {
+      "name": "Exterior Screen",
+      "category": "Control de ventanas",
+      "specific": true
+    },
+    "2112": {
+      "name": "Generic Audio Sink",
+      "category": "Receptor de audio",
+      "specific": false
+    },
+    "2113": {
+      "name": "Standalone Speaker",
+      "category": "Altavoz",
+      "specific": true
+    },
+    "2114": {
+      "name": "Soundbar",
+      "category": "Receptor de audio",
+      "specific": true
+    },
+    "2115": {
+      "name": "Bookshelf Speaker",
+      "category": "Altavoz",
+      "specific": true
+    },
+    "2116": {
+      "name": "Standmounted Speaker",
+      "category": "Altavoz",
+      "specific": true
+    },
+    "2117": {
+      "name": "Speakerphone",
+      "category": "Altavoz",
+      "specific": true
+    },
+    "2176": {
+      "name": "Generic Audio Source",
+      "category": "Fuente de audio",
+      "specific": false
+    },
+    "2177": {
+      "name": "Microphone",
+      "category": "Micrófono",
+      "specific": true
+    },
+    "2178": {
+      "name": "Alarm",
+      "category": "Fuente de audio",
+      "specific": true
+    },
+    "2179": {
+      "name": "Bell",
+      "category": "Fuente de audio",
+      "specific": true
+    },
+    "2180": {
+      "name": "Horn",
+      "category": "Fuente de audio",
+      "specific": true
+    },
+    "2181": {
+      "name": "Broadcasting Device",
+      "category": "Fuente de audio",
+      "specific": true
+    },
+    "2182": {
+      "name": "Service Desk",
+      "category": "Fuente de audio",
+      "specific": true
+    },
+    "2183": {
+      "name": "Kiosk",
+      "category": "Fuente de audio",
+      "specific": true
+    },
+    "2184": {
+      "name": "Broadcasting Room",
+      "category": "Fuente de audio",
+      "specific": true
+    },
+    "2185": {
+      "name": "Auditorium",
+      "category": "Fuente de audio",
+      "specific": true
+    },
+    "2240": {
+      "name": "Generic Motorized Vehicle",
+      "category": "Vehículo",
+      "specific": false
+    },
+    "2241": {
+      "name": "Car",
+      "category": "Vehículo",
+      "specific": true
+    },
+    "2242": {
+      "name": "Large Goods Vehicle",
+      "category": "Vehículo",
+      "specific": true
+    },
+    "2243": {
+      "name": "2-Wheeled Vehicle",
+      "category": "Vehículo",
+      "specific": true
+    },
+    "2244": {
+      "name": "Motorbike",
+      "category": "Vehículo",
+      "specific": true
+    },
+    "2245": {
+      "name": "Scooter",
+      "category": "Vehículo",
+      "specific": true
+    },
+    "2246": {
+      "name": "Moped",
+      "category": "Vehículo",
+      "specific": true
+    },
+    "2247": {
+      "name": "3-Wheeled Vehicle",
+      "category": "Vehículo",
+      "specific": true
+    },
+    "2248": {
+      "name": "Light Vehicle",
+      "category": "Vehículo",
+      "specific": true
+    },
+    "2249": {
+      "name": "Quad Bike",
+      "category": "Vehículo",
+      "specific": true
+    },
+    "2250": {
+      "name": "Minibus",
+      "category": "Vehículo",
+      "specific": true
+    },
+    "2251": {
+      "name": "Bus",
+      "category": "Vehículo",
+      "specific": true
+    },
+    "2252": {
+      "name": "Trolley",
+      "category": "Vehículo",
+      "specific": true
+    },
+    "2253": {
+      "name": "Agricultural Vehicle",
+      "category": "Vehículo",
+      "specific": true
+    },
+    "2254": {
+      "name": "Camper / Caravan",
+      "category": "Vehículo",
+      "specific": true
+    },
+    "2255": {
+      "name": "Recreational Vehicle / Motor Home",
+      "category": "Vehículo",
+      "specific": true
+    },
+    "2304": {
+      "name": "Generic Domestic Appliance",
+      "category": "Electrodoméstico",
+      "specific": false
+    },
+    "2305": {
+      "name": "Refrigerator",
+      "category": "Electrodoméstico",
+      "specific": true
+    },
+    "2306": {
+      "name": "Freezer",
+      "category": "Electrodoméstico",
+      "specific": true
+    },
+    "2307": {
+      "name": "Oven",
+      "category": "Electrodoméstico",
+      "specific": true
+    },
+    "2308": {
+      "name": "Microwave",
+      "category": "Electrodoméstico",
+      "specific": true
+    },
+    "2309": {
+      "name": "Toaster",
+      "category": "Electrodoméstico",
+      "specific": true
+    },
+    "2310": {
+      "name": "Washing Machine",
+      "category": "Electrodoméstico",
+      "specific": true
+    },
+    "2311": {
+      "name": "Dryer",
+      "category": "Electrodoméstico",
+      "specific": true
+    },
+    "2312": {
+      "name": "Coffee maker",
+      "category": "Electrodoméstico",
+      "specific": true
+    },
+    "2313": {
+      "name": "Clothes iron",
+      "category": "Electrodoméstico",
+      "specific": true
+    },
+    "2314": {
+      "name": "Curling iron",
+      "category": "Electrodoméstico",
+      "specific": true
+    },
+    "2315": {
+      "name": "Hair dryer",
+      "category": "Electrodoméstico",
+      "specific": true
+    },
+    "2316": {
+      "name": "Vacuum cleaner",
+      "category": "Electrodoméstico",
+      "specific": true
+    },
+    "2317": {
+      "name": "Robotic vacuum cleaner",
+      "category": "Electrodoméstico",
+      "specific": true
+    },
+    "2318": {
+      "name": "Rice cooker",
+      "category": "Electrodoméstico",
+      "specific": true
+    },
+    "2319": {
+      "name": "Clothes steamer",
+      "category": "Electrodoméstico",
+      "specific": true
+    },
+    "2368": {
+      "name": "Generic Wearable Audio Device",
+      "category": "Dispositivo de audio vestible",
+      "specific": false
+    },
+    "2369": {
+      "name": "Earbud",
+      "category": "Audífonos",
+      "specific": true
+    },
+    "2370": {
+      "name": "Headset",
+      "category": "Audífonos",
+      "specific": true
+    },
+    "2371": {
+      "name": "Headphones",
+      "category": "Audífonos",
+      "specific": true
+    },
+    "2372": {
+      "name": "Neck Band",
+      "category": "Dispositivo de audio vestible",
+      "specific": true
+    },
+    "2373": {
+      "name": "Left Earbud",
+      "category": "Audífonos",
+      "specific": true
+    },
+    "2374": {
+      "name": "Right Earbud",
+      "category": "Audífonos",
+      "specific": true
+    },
+    "2432": {
+      "name": "Generic Aircraft",
+      "category": "Aeronave",
+      "specific": false
+    },
+    "2433": {
+      "name": "Light Aircraft",
+      "category": "Aeronave",
+      "specific": true
+    },
+    "2434": {
+      "name": "Microlight",
+      "category": "Aeronave",
+      "specific": true
+    },
+    "2435": {
+      "name": "Paraglider",
+      "category": "Aeronave",
+      "specific": true
+    },
+    "2436": {
+      "name": "Large Passenger Aircraft",
+      "category": "Aeronave",
+      "specific": true
+    },
+    "2496": {
+      "name": "Generic AV Equipment",
+      "category": "Equipo audiovisual",
+      "specific": false
+    },
+    "2497": {
+      "name": "Amplifier",
+      "category": "Equipo audiovisual",
+      "specific": true
+    },
+    "2498": {
+      "name": "Receiver",
+      "category": "Equipo audiovisual",
+      "specific": true
+    },
+    "2499": {
+      "name": "Radio",
+      "category": "Equipo audiovisual",
+      "specific": true
+    },
+    "2500": {
+      "name": "Tuner",
+      "category": "Equipo audiovisual",
+      "specific": true
+    },
+    "2501": {
+      "name": "Turntable",
+      "category": "Equipo audiovisual",
+      "specific": true
+    },
+    "2502": {
+      "name": "CD Player",
+      "category": "Equipo audiovisual",
+      "specific": true
+    },
+    "2503": {
+      "name": "DVD Player",
+      "category": "Equipo audiovisual",
+      "specific": true
+    },
+    "2504": {
+      "name": "Bluray Player",
+      "category": "Equipo audiovisual",
+      "specific": true
+    },
+    "2505": {
+      "name": "Optical Disc Player",
+      "category": "Equipo audiovisual",
+      "specific": true
+    },
+    "2506": {
+      "name": "Set-Top Box",
+      "category": "Equipo audiovisual",
+      "specific": true
+    },
+    "2560": {
+      "name": "Generic Display Equipment",
+      "category": "Pantalla",
+      "specific": false
+    },
+    "2561": {
+      "name": "Television",
+      "category": "Televisor",
+      "specific": true
+    },
+    "2562": {
+      "name": "Monitor",
+      "category": "Pantalla",
+      "specific": true
+    },
+    "2563": {
+      "name": "Projector",
+      "category": "Cañón",
+      "specific": true
+    },
+    "2624": {
+      "name": "Generic Hearing aid",
+      "category": "Audífono de asistencia",
+      "specific": false
+    },
+    "2625": {
+      "name": "In-ear hearing aid",
+      "category": "Audífono de asistencia",
+      "specific": true
+    },
+    "2626": {
+      "name": "Behind-ear hearing aid",
+      "category": "Audífono de asistencia",
+      "specific": true
+    },
+    "2627": {
+      "name": "Cochlear Implant",
+      "category": "Audífono de asistencia",
+      "specific": true
+    },
+    "2688": {
+      "name": "Generic Gaming",
+      "category": "Equipo de videojuegos",
+      "specific": false
+    },
+    "2689": {
+      "name": "Home Video Game Console",
+      "category": "Equipo de videojuegos",
+      "specific": true
+    },
+    "2690": {
+      "name": "Portable handheld console",
+      "category": "Equipo de videojuegos",
+      "specific": true
+    },
+    "2752": {
+      "name": "Generic Signage",
+      "category": "Señalización",
+      "specific": false
+    },
+    "2753": {
+      "name": "Digital Signage",
+      "category": "Señalización",
+      "specific": true
+    },
+    "2754": {
+      "name": "Electronic Label",
+      "category": "Señalización",
+      "specific": true
+    },
+    "3136": {
+      "name": "Generic Pulse Oximeter",
+      "category": "Oxímetro",
+      "specific": false
+    },
+    "3137": {
+      "name": "Fingertip Pulse Oximeter",
+      "category": "Oxímetro",
+      "specific": true
+    },
+    "3138": {
+      "name": "Wrist Worn Pulse Oximeter",
+      "category": "Oxímetro",
+      "specific": true
+    },
+    "3200": {
+      "name": "Generic Weight Scale",
+      "category": "Báscula",
+      "specific": false
+    },
+    "3264": {
+      "name": "Generic Personal Mobility Device",
+      "category": "Movilidad personal",
+      "specific": false
+    },
+    "3265": {
+      "name": "Powered Wheelchair",
+      "category": "Movilidad personal",
+      "specific": true
+    },
+    "3266": {
+      "name": "Mobility Scooter",
+      "category": "Movilidad personal",
+      "specific": true
+    },
+    "3328": {
+      "name": "Generic Continuous Glucose Monitor",
+      "category": "Monitor de glucosa",
+      "specific": false
+    },
+    "3392": {
+      "name": "Generic Insulin Pump",
+      "category": "Bomba de insulina",
+      "specific": false
+    },
+    "3393": {
+      "name": "Insulin Pump, durable pump",
+      "category": "Bomba de insulina",
+      "specific": true
+    },
+    "3396": {
+      "name": "Insulin Pump, patch pump",
+      "category": "Bomba de insulina",
+      "specific": true
+    },
+    "3400": {
+      "name": "Insulin Pen",
+      "category": "Bomba de insulina",
+      "specific": true
+    },
+    "3456": {
+      "name": "Generic Medication Delivery",
+      "category": "Dispensador de medicamentos",
+      "specific": false
+    },
+    "3520": {
+      "name": "Generic Spirometer",
+      "category": "Espirómetro",
+      "specific": false
+    },
+    "3521": {
+      "name": "Handheld Spirometer",
+      "category": "Espirómetro",
+      "specific": true
+    },
+    "5184": {
+      "name": "Generic Outdoor Sports Activity",
+      "category": "Equipo deportivo",
+      "specific": false
+    },
+    "5185": {
+      "name": "Location Display",
+      "category": "Equipo deportivo",
+      "specific": true
+    },
+    "5186": {
+      "name": "Location and Navigation Display",
+      "category": "Equipo deportivo",
+      "specific": true
+    },
+    "5187": {
+      "name": "Location Pod",
+      "category": "Equipo deportivo",
+      "specific": true
+    },
+    "5188": {
+      "name": "Location and Navigation Pod",
+      "category": "Equipo deportivo",
+      "specific": true
+    },
+    "5248": {
+      "name": "Generic Industrial Measurement Device",
+      "category": "Medición industrial",
+      "specific": false
+    },
+    "5249": {
+      "name": "Torque Testing Device",
+      "category": "Medición industrial",
+      "specific": true
+    },
+    "5250": {
+      "name": "Caliper",
+      "category": "Medición industrial",
+      "specific": true
+    },
+    "5251": {
+      "name": "Dial Indicator",
+      "category": "Medición industrial",
+      "specific": true
+    },
+    "5252": {
+      "name": "Micrometer",
+      "category": "Medición industrial",
+      "specific": true
+    },
+    "5253": {
+      "name": "Height Gauge",
+      "category": "Medición industrial",
+      "specific": true
+    },
+    "5254": {
+      "name": "Force Gauge",
+      "category": "Medición industrial",
+      "specific": true
+    },
+    "5312": {
+      "name": "Generic Industrial Tools",
+      "category": "Herramienta industrial",
+      "specific": false
+    },
+    "5313": {
+      "name": "Machine Tool Holder",
+      "category": "Herramienta industrial",
+      "specific": true
+    },
+    "5314": {
+      "name": "Generic Clamping Device",
+      "category": "Herramienta industrial",
+      "specific": true
+    },
+    "5315": {
+      "name": "Clamping Jaws/Jaw Chuck",
+      "category": "Herramienta industrial",
+      "specific": true
+    },
+    "5316": {
+      "name": "Clamping (Collet) Chuck",
+      "category": "Herramienta industrial",
+      "specific": true
+    },
+    "5317": {
+      "name": "Clamping Mandrel",
+      "category": "Herramienta industrial",
+      "specific": true
+    },
+    "5318": {
+      "name": "Vise",
+      "category": "Herramienta industrial",
+      "specific": true
+    },
+    "5319": {
+      "name": "Zero-Point Clamping System",
+      "category": "Herramienta industrial",
+      "specific": true
+    },
+    "5320": {
+      "name": "Torque Wrench",
+      "category": "Herramienta industrial",
+      "specific": true
+    },
+    "5321": {
+      "name": "Torque Screwdriver",
+      "category": "Herramienta industrial",
+      "specific": true
+    },
+    "5376": {
+      "name": "Generic Cookware Device",
+      "category": "Utensilio de cocina",
+      "specific": false
+    },
+    "5377": {
+      "name": "Pot and Jugs",
+      "category": "Utensilio de cocina",
+      "specific": true
+    },
+    "5378": {
+      "name": "Pressure Cooker",
+      "category": "Utensilio de cocina",
+      "specific": true
+    },
+    "5379": {
+      "name": "Slow Cooker",
+      "category": "Utensilio de cocina",
+      "specific": true
+    },
+    "5380": {
+      "name": "Steam Cooker",
+      "category": "Utensilio de cocina",
+      "specific": true
+    },
+    "5381": {
+      "name": "Saucepan",
+      "category": "Utensilio de cocina",
+      "specific": true
+    },
+    "5382": {
+      "name": "Frying Pan",
+      "category": "Utensilio de cocina",
+      "specific": true
+    },
+    "5383": {
+      "name": "Casserole",
+      "category": "Utensilio de cocina",
+      "specific": true
+    },
+    "5384": {
+      "name": "Dutch Oven",
+      "category": "Utensilio de cocina",
+      "specific": true
+    },
+    "5385": {
+      "name": "Grill Pan/Raclette Grill/Griddle Pan",
+      "category": "Utensilio de cocina",
+      "specific": true
+    },
+    "5386": {
+      "name": "Braising Pan",
+      "category": "Utensilio de cocina",
+      "specific": true
+    },
+    "5387": {
+      "name": "Wok Pan",
+      "category": "Utensilio de cocina",
+      "specific": true
+    },
+    "5388": {
+      "name": "Paella Pan",
+      "category": "Utensilio de cocina",
+      "specific": true
+    },
+    "5389": {
+      "name": "Crepe Pan",
+      "category": "Utensilio de cocina",
+      "specific": true
+    },
+    "5390": {
+      "name": "Tagine",
+      "category": "Utensilio de cocina",
+      "specific": true
+    },
+    "5391": {
+      "name": "Fondue",
+      "category": "Utensilio de cocina",
+      "specific": true
+    },
+    "5392": {
+      "name": "Lid",
+      "category": "Utensilio de cocina",
+      "specific": true
+    },
+    "5393": {
+      "name": "Wired Probe",
+      "category": "Utensilio de cocina",
+      "specific": true
+    },
+    "5394": {
+      "name": "Wireless Probe",
+      "category": "Utensilio de cocina",
+      "specific": true
+    },
+    "5395": {
+      "name": "Baking Molds",
+      "category": "Utensilio de cocina",
+      "specific": true
+    },
+    "5396": {
+      "name": "Baking Tray",
+      "category": "Utensilio de cocina",
+      "specific": true
+    }
+  }
+}

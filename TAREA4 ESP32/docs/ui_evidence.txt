@@ -1,0 +1,1 @@
+PASS: fixtures aislados, WebSocket, filtros, detalle, calibración, ajustes, CSV, diagnóstico, temas, móvil y reinicio.

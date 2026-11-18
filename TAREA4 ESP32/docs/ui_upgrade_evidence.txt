@@ -1,0 +1,1 @@
+PASS: estados, perfil real, calibración 1/3/5/10 m con ventanas y lecturas, aplicación, diagnóstico, móvil y pérdida del backend.

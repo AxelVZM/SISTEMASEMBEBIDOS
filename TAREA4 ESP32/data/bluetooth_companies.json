@@ -1,7 +1,0 @@
-{
-  "source": "https://bitbucket.org/bluetooth-SIG/public/raw/main/assigned_numbers/company_identifiers/company_identifiers.yaml",
-  "official_index": "https://www.bluetooth.com/specifications/assigned-numbers/",
-  "sha256": "7931f9110ef9b817961b3e4bc93518dd409539e6486f3b14339fddec5b47c7a2",
-  "entries": 4049,
-  "encoding": "lossless dictionary; names unmodified"
-}

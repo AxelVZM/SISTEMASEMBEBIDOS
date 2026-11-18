@@ -1,0 +1,10 @@
+@echo off
+setlocal
+cd /d "%~dp0"
+chcp 65001 >nul
+py -3.12 scripts\launcher.py install
+set "DETECTOR_EXIT=%ERRORLEVEL%"
+if not "%DETECTOR_EXIT%"=="0" echo Revisa el mensaje anterior. Si no hay Python, instala Python 3.12 x64 con el lanzador py.
+echo.
+pause
+exit /b %DETECTOR_EXIT%

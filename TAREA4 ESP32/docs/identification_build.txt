@@ -1,0 +1,71 @@
+Executing action: all (aliases: build)
+Running ninja in directory <PROJECT>/firmware/build
+Executing "ninja all"...
+[1/9] Performing build step for 'bootloader'
+[1/1] cd <PROJECT>/firmware/build/bootloader/esp-idf/esptool_py && <ESPRESSIF_TOOLS>/python_env/idf5.4_py3.12_env/bin/python <ESP_IDF_5.4.2>/components/partition_table/check_sizes.py --offset 0x8000 bootloader 0x1000 <PROJECT>/firmware/build/bootloader/bootloader.bin
+Bootloader binary size 0x6570 bytes. 0xa90 bytes (9%) free.
+[2/9] No install step for 'bootloader'
+[3/9] Completed 'bootloader'
+[4/9] Building C object esp-idf/main/CMakeFiles/__idf_main.dir/main.c.obj
+[5/9] Linking C static library esp-idf/main/libmain.a
+[6/9] Generating ld/sections.ld
+[7/9] Linking CXX executable esp32_detector.elf
+[8/9] Generating binary image from built executable
+esptool.py v4.13.0
+Creating esp32 image...
+Merged 2 ELF sections
+Successfully created esp32 image.
+Generated <PROJECT>/firmware/build/esp32_detector.bin
+[9/9] cd <PROJECT>/firmware/build/esp-idf/esptool_py && <ESPRESSIF_TOOLS>/python_env/idf5.4_py3.12_env/bin/python <ESP_IDF_5.4.2>/components/partition_table/check_sizes.py --offset 0x8000 partition --type app <PROJECT>/firmware/build/partition_table/partition-table.bin <PROJECT>/firmware/build/esp32_detector.bin
+esp32_detector.bin binary size 0x129fe0 bytes. Smallest app partition is 0x300000 bytes. 0x1d6020 bytes (61%) free.
+Executing action: size
+Running ninja in directory <PROJECT>/firmware/build
+Executing "ninja all"...
+[1/4] cd <PROJECT>/firmware/build/esp-idf/esptool_py && <ESPRESSIF_TOOLS>/python_env/idf5.4_py3.12_env/bin/python <ESP_IDF_5.4.2>/components/partition_table/check_sizes.py --offset 0x8000 partition --type app <PROJECT>/firmware/build/partition_table/partition-table.bin <PROJECT>/firmware/build/esp32_detector.bin
+esp32_detector.bin binary size 0x129fe0 bytes. Smallest app partition is 0x300000 bytes. 0x1d6020 bytes (61%) free.
+[2/4] Performing build step for 'bootloader'
+[1/1] cd <PROJECT>/firmware/build/bootloader/esp-idf/esptool_py && <ESPRESSIF_TOOLS>/python_env/idf5.4_py3.12_env/bin/python <ESP_IDF_5.4.2>/components/partition_table/check_sizes.py --offset 0x8000 bootloader 0x1000 <PROJECT>/firmware/build/bootloader/bootloader.bin
+Bootloader binary size 0x6570 bytes. 0xa90 bytes (9%) free.
+[3/4] No install step for 'bootloader'
+[4/4] Completed 'bootloader'
+Running ninja in directory <PROJECT>/firmware/build
+Executing "ninja size"...
+[0/1] cd <PROJECT>/firmware/build && <ESPRESSIF_TOOLS>/python_env/idf5.4_py3.12_env/lib/python3.12/site-packages/cmake/data/bin/cmake -D "IDF_SIZE_TOOL=<ESPRESSIF_TOOLS>/python_env/idf5.4_py3.12_env/bin/python;-m;esp_idf_size" -D MAP_FILE=<PROJECT>/firmware/build/esp32_detector.map -D OUTPUT_JSON= -P <ESP_IDF_5.4.2>/tools/cmake/run_size_tool.cmake
+                           Memory Type Usage Summary                            
+┏━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━┳━━━━━━━━━━┳━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━┓
+┃ Memory            ┃              ┃          ┃                ┃               ┃
+┃ Type/Section      ┃ Used [bytes] ┃ Used [%] ┃ Remain [bytes] ┃ Total [bytes] ┃
+┡━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━╇━━━━━━━━━━╇━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━┩
+│ Flash Code        │       920944 │          │                │               │
+│    .text          │       920944 │          │                │               │
+│ Flash Data        │       171260 │          │                │               │
+│    .rodata        │       171004 │          │                │               │
+│    .appdesc       │          256 │          │                │               │
+│ IRAM              │       105598 │    80.56 │          25474 │        131072 │
+│    .text          │       104571 │    79.78 │                │               │
+│    .vectors       │         1027 │     0.78 │                │               │
+│ DRAM              │        69492 │    55.78 │          55088 │        124580 │
+│    .bss           │        46856 │    37.61 │                │               │
+│    .data          │        22636 │    18.17 │                │               │
+│ RTC SLOW          │           32 │     0.39 │           8160 │          8192 │
+│    .rtc_slow_rese │           24 │     0.29 │                │               │
+│ rved              │              │          │                │               │
+│    .rtc_noinit    │            8 │      0.1 │                │               │
+│ RTC FAST          │           28 │     0.34 │           8164 │          8192 │
+│    .force_fast    │           28 │     0.34 │                │               │
+└───────────────────┴──────────────┴──────────┴────────────────┴───────────────┘
+Total image size: 1220466 bytes (.bin may be padded larger)
+Note: The reported total sizes may be smaller than those in the technical 
+reference manual due to reserved memory and application configuration. The total
+flash size available for the application is not included by default, as it 
+cannot be reliably determined due to the presence of other data like the 
+bootloader, partition table, and application partition size.
+
+Project build complete. To flash, run:
+ idf.py flash
+or
+ idf.py -p PORT flash
+or
+ python -m esptool --chip esp32 -b 460800 --before default_reset --after hard_reset write_flash --flash_mode dio --flash_size 4MB --flash_freq 40m 0x1000 upgrade/esp32-detector/firmware/build/bootloader/bootloader.bin 0x8000 upgrade/esp32-detector/firmware/build/partition_table/partition-table.bin 0x10000 upgrade/esp32-detector/firmware/build/esp32_detector.bin
+or from the "<PROJECT>/firmware/build" directory
+ python -m esptool --chip esp32 -b 460800 --before default_reset --after hard_reset write_flash "@flash_args"

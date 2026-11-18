@@ -1,0 +1,33 @@
+{
+  "updated_utc": "2026-11-08T15:38:22.589425+00:00",
+  "sources": [
+    {
+      "registry": "MA-L",
+      "url": "https://standards-oui.ieee.org/oui/oui.csv",
+      "records": 40458,
+      "sha256": "8782e24737b10209ce905d8564b21a4f0d9d643cabd2049f4e077283bc6b3044",
+      "unique_records": 40455
+    },
+    {
+      "registry": "MA-M",
+      "url": "https://standards-oui.ieee.org/oui28/mam.csv",
+      "records": 6674,
+      "sha256": "f02e2e8a6de71f30bcc76a22e4020a7a41a76ebf24dc92c5cc5922ad598758c9",
+      "unique_records": 6674
+    },
+    {
+      "registry": "MA-S",
+      "url": "https://standards-oui.ieee.org/oui36/oui36.csv",
+      "records": 7267,
+      "sha256": "db969e320fe4a9d1c7229597422f9c3fe806e682ae38e1cfb9611f946ca468c4",
+      "unique_records": 7267
+    },
+    {
+      "registry": "SIG",
+      "url": "https://bitbucket.org/bluetooth-SIG/public/raw/main/assigned_numbers/company_identifiers/company_identifiers.yaml",
+      "records": 4065,
+      "sha256": "8575ab025d09711c304ab3f6c27730fb0a56713115b77ba398112bef4ef6525a",
+      "unique_records": 4065
+    }
+  ]
+}

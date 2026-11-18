@@ -1,0 +1,22 @@
+[Unit]
+Description=ESP32 Detector on a physical Linux USB host
+After=network.target
+
+[Service]
+Type=simple
+User=detector
+Group=detector
+SupplementaryGroups=dialout
+WorkingDirectory=/opt/esp32-detector
+Environment=DETECTOR_DATA=/var/lib/esp32-detector
+ExecStart=/opt/esp32-detector/.venv/bin/python -m uvicorn backend.main:app --host 0.0.0.0 --port 8000 --no-proxy-headers
+Restart=always
+RestartSec=5
+StateDirectory=esp32-detector
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/esp32-detector
+
+[Install]
+WantedBy=multi-user.target

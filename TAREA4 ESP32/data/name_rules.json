@@ -1,0 +1,1385 @@
+{
+  "organizations": [
+    {
+      "pattern": "Samsung|Murata Manufacturing|Universal Global Scientific",
+      "brand": "Samsung"
+    },
+    {
+      "pattern": "Apple",
+      "brand": "Apple"
+    },
+    {
+      "pattern": "Huawei",
+      "brand": "Huawei"
+    },
+    {
+      "pattern": "Honor Device|\\bHONOR\\b",
+      "brand": "Honor"
+    },
+    {
+      "pattern": "\\bOPPO\\b|Guangdong Oppo",
+      "brand": "OPPO"
+    },
+    {
+      "pattern": "vivo Mobile|\\bvivo\\b",
+      "brand": "Vivo"
+    },
+    {
+      "pattern": "Xiaomi|Wingtech|Huaqin|Longcheer",
+      "brand": "Xiaomi"
+    },
+    {
+      "pattern": "Realme",
+      "brand": "Realme"
+    },
+    {
+      "pattern": "Motorola|TINNO Mobile",
+      "brand": "Motorola"
+    },
+    {
+      "pattern": "Lenovo|LCFC\\(Hefei\\)",
+      "brand": "Lenovo"
+    },
+    {
+      "pattern": "HMD Global",
+      "brand": "HMD"
+    },
+    {
+      "pattern": "Nokia",
+      "brand": "Nokia"
+    },
+    {
+      "pattern": "Google",
+      "brand": "Google"
+    },
+    {
+      "pattern": "OnePlus",
+      "brand": "OnePlus"
+    },
+    {
+      "pattern": "Sony",
+      "brand": "Sony"
+    },
+    {
+      "pattern": "ASUSTek|\\bASUS\\b|PEGATRON|AzureWave",
+      "brand": "ASUS"
+    },
+    {
+      "pattern": "\\bZTE\\b",
+      "brand": "ZTE"
+    },
+    {
+      "pattern": "\\bTCL\\b",
+      "brand": "TCL"
+    },
+    {
+      "pattern": "TECNO",
+      "brand": "Tecno"
+    },
+    {
+      "pattern": "Infinix",
+      "brand": "Infinix"
+    },
+    {
+      "pattern": "\\bitel\\b",
+      "brand": "Itel"
+    },
+    {
+      "pattern": "Transsion",
+      "brand": "Transsion"
+    },
+    {
+      "pattern": "Nothing Technology",
+      "brand": "Nothing"
+    },
+    {
+      "pattern": "Fairphone",
+      "brand": "Fairphone"
+    },
+    {
+      "pattern": "MEIZU",
+      "brand": "Meizu"
+    },
+    {
+      "pattern": "Nubia",
+      "brand": "Nubia"
+    },
+    {
+      "pattern": "BlackShark",
+      "brand": "BlackShark"
+    },
+    {
+      "pattern": "DOOGEE",
+      "brand": "Doogee"
+    },
+    {
+      "pattern": "BLU Products",
+      "brand": "BLU"
+    },
+    {
+      "pattern": "Alcatel",
+      "brand": "Alcatel"
+    },
+    {
+      "pattern": "Hewlett|HP Inc|Hewlett.Packard",
+      "brand": "HP"
+    },
+    {
+      "pattern": "\\bDell\\b",
+      "brand": "Dell"
+    },
+    {
+      "pattern": "\\bAcer\\b",
+      "brand": "Acer"
+    },
+    {
+      "pattern": "Micro-Star|\\bMSI\\b",
+      "brand": "MSI"
+    },
+    {
+      "pattern": "Microsoft",
+      "brand": "Microsoft"
+    },
+    {
+      "pattern": "Toshiba|Dynabook",
+      "brand": "Toshiba"
+    },
+    {
+      "pattern": "Fujitsu",
+      "brand": "Fujitsu"
+    },
+    {
+      "pattern": "Gigabyte",
+      "brand": "Gigabyte"
+    },
+    {
+      "pattern": "Razer",
+      "brand": "Razer"
+    },
+    {
+      "pattern": "Framework Computer",
+      "brand": "Framework"
+    },
+    {
+      "pattern": "CLEVO",
+      "brand": "Clevo"
+    },
+    {
+      "pattern": "Compal Broadband",
+      "brand": "Compal Broadband"
+    },
+    {
+      "pattern": "COMPAL INFORMATION|Compal Electronics",
+      "brand": "Compal (Laptop)"
+    },
+    {
+      "pattern": "Quanta Computer|Quanta Microsystems",
+      "brand": "Quanta (Laptop)"
+    },
+    {
+      "pattern": "Wistron Info",
+      "brand": "Wistron (Laptop)"
+    },
+    {
+      "pattern": "Chicony Electronics",
+      "brand": "Chicony (Laptop)"
+    },
+    {
+      "pattern": "Hon Hai Precision|FOXCONN",
+      "brand": "Foxconn"
+    },
+    {
+      "pattern": "Alldocube",
+      "brand": "Alldocube"
+    },
+    {
+      "pattern": "Chuwi",
+      "brand": "Chuwi"
+    },
+    {
+      "pattern": "Wacom",
+      "brand": "Wacom"
+    },
+    {
+      "pattern": "Epson|Seiko Epson",
+      "brand": "Epson"
+    },
+    {
+      "pattern": "\\bCanon\\b",
+      "brand": "Canon"
+    },
+    {
+      "pattern": "Brother",
+      "brand": "Brother"
+    },
+    {
+      "pattern": "Xerox",
+      "brand": "Xerox"
+    },
+    {
+      "pattern": "Ricoh",
+      "brand": "Ricoh"
+    },
+    {
+      "pattern": "Kyocera",
+      "brand": "Kyocera"
+    },
+    {
+      "pattern": "Zebra Technologies",
+      "brand": "Zebra"
+    },
+    {
+      "pattern": "Konica Minolta",
+      "brand": "Konica Minolta"
+    },
+    {
+      "pattern": "Lexmark",
+      "brand": "Lexmark"
+    },
+    {
+      "pattern": "Pantum",
+      "brand": "Pantum"
+    },
+    {
+      "pattern": "Star Micronics",
+      "brand": "Star Micronics"
+    },
+    {
+      "pattern": "BIXOLON",
+      "brand": "Bixolon"
+    },
+    {
+      "pattern": "RISO KAGAKU",
+      "brand": "Riso"
+    },
+    {
+      "pattern": "BenQ",
+      "brand": "BenQ"
+    },
+    {
+      "pattern": "Optoma|Coretronic",
+      "brand": "Optoma"
+    },
+    {
+      "pattern": "ViewSonic",
+      "brand": "ViewSonic"
+    },
+    {
+      "pattern": "InFocus",
+      "brand": "InFocus"
+    },
+    {
+      "pattern": "Panasonic",
+      "brand": "Panasonic"
+    },
+    {
+      "pattern": "\\bNEC\\b|NEC Corporation|NEC Display|Sharp NEC",
+      "brand": "NEC"
+    },
+    {
+      "pattern": "SHARP Corporation",
+      "brand": "Sharp"
+    },
+    {
+      "pattern": "CASIO COMPUTER",
+      "brand": "Casio"
+    },
+    {
+      "pattern": "Christie Digital",
+      "brand": "Christie"
+    },
+    {
+      "pattern": "\\bBarco\\b",
+      "brand": "Barco"
+    },
+    {
+      "pattern": "Vivitek|Delta Electronics",
+      "brand": "Vivitek"
+    },
+    {
+      "pattern": "XGimi",
+      "brand": "XGIMI"
+    },
+    {
+      "pattern": "ANKER",
+      "brand": "Anker"
+    },
+    {
+      "pattern": "TP-Link|TP-LINK",
+      "brand": "TP-Link"
+    },
+    {
+      "pattern": "D-Link",
+      "brand": "D-Link"
+    },
+    {
+      "pattern": "Cisco|Meraki",
+      "brand": "Cisco"
+    },
+    {
+      "pattern": "MikroTik|Routerboard|Mikrotikls",
+      "brand": "MikroTik"
+    },
+    {
+      "pattern": "Ubiquiti",
+      "brand": "Ubiquiti"
+    },
+    {
+      "pattern": "Tenda",
+      "brand": "Tenda"
+    },
+    {
+      "pattern": "Mercusys",
+      "brand": "Mercusys"
+    },
+    {
+      "pattern": "Netgear",
+      "brand": "Netgear"
+    },
+    {
+      "pattern": "Aruba",
+      "brand": "Aruba"
+    },
+    {
+      "pattern": "Fortinet",
+      "brand": "Fortinet"
+    },
+    {
+      "pattern": "Ruckus",
+      "brand": "Ruckus"
+    },
+    {
+      "pattern": "Juniper",
+      "brand": "Juniper"
+    },
+    {
+      "pattern": "Extreme Networks",
+      "brand": "Extreme Networks"
+    },
+    {
+      "pattern": "Cambium Networks",
+      "brand": "Cambium"
+    },
+    {
+      "pattern": "DrayTek",
+      "brand": "DrayTek"
+    },
+    {
+      "pattern": "Sagemcom",
+      "brand": "Sagemcom"
+    },
+    {
+      "pattern": "MitraStar",
+      "brand": "MitraStar"
+    },
+    {
+      "pattern": "\\bArris\\b|CommScope",
+      "brand": "Arris"
+    },
+    {
+      "pattern": "Hitron",
+      "brand": "Hitron"
+    },
+    {
+      "pattern": "Calix",
+      "brand": "Calix"
+    },
+    {
+      "pattern": "Fiberhome",
+      "brand": "FiberHome"
+    },
+    {
+      "pattern": "Arcadyan",
+      "brand": "Arcadyan"
+    },
+    {
+      "pattern": "Gemtek",
+      "brand": "Gemtek"
+    },
+    {
+      "pattern": "Sercomm",
+      "brand": "Sercomm"
+    },
+    {
+      "pattern": "CyberTAN",
+      "brand": "CyberTAN"
+    },
+    {
+      "pattern": "Grandstream",
+      "brand": "Grandstream"
+    },
+    {
+      "pattern": "Yealink",
+      "brand": "Yealink"
+    },
+    {
+      "pattern": "Synology",
+      "brand": "Synology"
+    },
+    {
+      "pattern": "QNAP",
+      "brand": "QNAP"
+    },
+    {
+      "pattern": "LG Electronics",
+      "brand": "LG"
+    },
+    {
+      "pattern": "Hisense",
+      "brand": "Hisense"
+    },
+    {
+      "pattern": "Amazon Technologies",
+      "brand": "Amazon"
+    },
+    {
+      "pattern": "Nintendo",
+      "brand": "Nintendo"
+    },
+    {
+      "pattern": "Garmin",
+      "brand": "Garmin"
+    },
+    {
+      "pattern": "Fitbit",
+      "brand": "Fitbit"
+    },
+    {
+      "pattern": "Huami",
+      "brand": "Amazfit"
+    },
+    {
+      "pattern": "\\bJBL\\b|Harman",
+      "brand": "JBL"
+    },
+    {
+      "pattern": "Bose Corporation",
+      "brand": "Bose"
+    },
+    {
+      "pattern": "Sennheiser",
+      "brand": "Sennheiser"
+    },
+    {
+      "pattern": "Sonos",
+      "brand": "Sonos"
+    }
+  ],
+  "names": [
+    {
+      "pattern": "\\biPhone\\b",
+      "brand": "Apple",
+      "category": "Celular"
+    },
+    {
+      "pattern": "\\biPad\\b",
+      "brand": "Apple",
+      "category": "Tablet"
+    },
+    {
+      "pattern": "\\b(?:MacBook|MacBook Air|MacBook Pro|iMac|Mac mini)\\b",
+      "brand": "Apple",
+      "category": "Laptop"
+    },
+    {
+      "pattern": "\\bAirPods\\b",
+      "brand": "Apple",
+      "category": "Audífonos"
+    },
+    {
+      "pattern": "\\bApple Watch\\b",
+      "brand": "Apple",
+      "category": "Reloj inteligente"
+    },
+    {
+      "pattern": "\\b(?:Galaxy Tab|SM-[TX]\\d{3})\\b",
+      "brand": "Samsung",
+      "category": "Tablet"
+    },
+    {
+      "pattern": "\\b(?:Galaxy Book|NP\\d{3}[A-Z])\\b",
+      "brand": "Samsung",
+      "category": "Laptop"
+    },
+    {
+      "pattern": "\\b(?:Galaxy Watch|Gear S\\d)\\b",
+      "brand": "Samsung",
+      "category": "Reloj inteligente"
+    },
+    {
+      "pattern": "\\b(?:Galaxy Buds)\\b",
+      "brand": "Samsung",
+      "category": "Audífonos"
+    },
+    {
+      "pattern": "\\b(?:The Freestyle|SP-LSP|SP-LFF)\\b",
+      "brand": "Samsung",
+      "category": "Cañón"
+    },
+    {
+      "pattern": "\\b(?:Galaxy S\\d+|Galaxy A\\d+|Galaxy M\\d+|Galaxy Z|Galaxy Note|Galaxy F\\d+|SM-[SAZMGFN]\\d{3})\\b",
+      "brand": "Samsung",
+      "category": "Celular"
+    },
+    {
+      "pattern": "\\bGalaxy\\b|\\bSamsung\\b",
+      "brand": "Samsung",
+      "category": "Celular"
+    },
+    {
+      "pattern": "\\b(?:MatePad|MediaPad)\\b",
+      "brand": "Huawei",
+      "category": "Tablet"
+    },
+    {
+      "pattern": "\\b(?:MateBook)\\b",
+      "brand": "Huawei",
+      "category": "Laptop"
+    },
+    {
+      "pattern": "\\b(?:HUAWEI Watch|Watch GT|Watch Fit)\\b",
+      "brand": "Huawei",
+      "category": "Reloj inteligente"
+    },
+    {
+      "pattern": "\\b(?:FreeBuds)\\b",
+      "brand": "Huawei",
+      "category": "Audífonos"
+    },
+    {
+      "pattern": "\\b(?:HG8\\d{3}|EG8\\d{3}|WS\\d{4}|HUAWEI-\\w+|HUAWEI[ _-]?AX3|B31[015]|B5[23]5)\\b",
+      "brand": "Huawei",
+      "category": "Router"
+    },
+    {
+      "pattern": "\\b(?:HUAWEI P\\d+|HUAWEI Mate \\d+|HUAWEI nova|Pura \\d+|HUAWEI Y\\d+)\\b",
+      "brand": "Huawei",
+      "category": "Celular"
+    },
+    {
+      "pattern": "\\bHuawei\\b",
+      "brand": "Huawei"
+    },
+    {
+      "pattern": "\\b(?:HONOR Pad)\\b",
+      "brand": "Honor",
+      "category": "Tablet"
+    },
+    {
+      "pattern": "\\b(?:MagicBook)\\b",
+      "brand": "Honor",
+      "category": "Laptop"
+    },
+    {
+      "pattern": "\\b(?:HONOR Router)\\b",
+      "brand": "Honor",
+      "category": "Router"
+    },
+    {
+      "pattern": "\\b(?:HONOR \\d+|HONOR X\\d+|HONOR Magic\\s?\\d|HONOR Play)\\b",
+      "brand": "Honor",
+      "category": "Celular"
+    },
+    {
+      "pattern": "\\bHonor\\b",
+      "brand": "Honor"
+    },
+    {
+      "pattern": "\\b(?:OPPO Pad)\\b",
+      "brand": "OPPO",
+      "category": "Tablet"
+    },
+    {
+      "pattern": "\\b(?:OPPO Enco)\\b",
+      "brand": "OPPO",
+      "category": "Audífonos"
+    },
+    {
+      "pattern": "\\b(?:OPPO Reno|OPPO Find|OPPO A\\d+|OPPO F\\d+|CPH\\d{4})\\b",
+      "brand": "OPPO",
+      "category": "Celular"
+    },
+    {
+      "pattern": "\\bOPPO\\b",
+      "brand": "OPPO",
+      "category": "Celular"
+    },
+    {
+      "pattern": "\\b(?:Vivo Pad)\\b",
+      "brand": "Vivo",
+      "category": "Tablet"
+    },
+    {
+      "pattern": "\\b(?:Vivo [VYX]\\d+|iQOO)\\b",
+      "brand": "Vivo",
+      "category": "Celular"
+    },
+    {
+      "pattern": "\\bVivo\\b",
+      "brand": "Vivo",
+      "category": "Celular"
+    },
+    {
+      "pattern": "\\b(?:Redmi Pad)\\b",
+      "brand": "Redmi",
+      "category": "Tablet"
+    },
+    {
+      "pattern": "\\b(?:RedmiBook)\\b",
+      "brand": "Redmi",
+      "category": "Laptop"
+    },
+    {
+      "pattern": "\\b(?:Redmi Buds)\\b",
+      "brand": "Redmi",
+      "category": "Audífonos"
+    },
+    {
+      "pattern": "\\b(?:Redmi Projector)\\b",
+      "brand": "Redmi",
+      "category": "Cañón"
+    },
+    {
+      "pattern": "\\b(?:Redmi Router|Redmi AX)\\b",
+      "brand": "Redmi",
+      "category": "Router"
+    },
+    {
+      "pattern": "\\b(?:Redmi Note|Redmi \\d+|Redmi [KAC]\\d+)\\b",
+      "brand": "Redmi",
+      "category": "Celular"
+    },
+    {
+      "pattern": "\\bRedmi\\b",
+      "brand": "Redmi",
+      "category": "Celular"
+    },
+    {
+      "pattern": "\\b(?:POCO Pad)\\b",
+      "brand": "POCO",
+      "category": "Tablet"
+    },
+    {
+      "pattern": "\\b(?:POCO [FXMC]\\d+)\\b",
+      "brand": "POCO",
+      "category": "Celular"
+    },
+    {
+      "pattern": "\\bPOCO\\b",
+      "brand": "POCO",
+      "category": "Celular"
+    },
+    {
+      "pattern": "\\b(?:Xiaomi Pad|Mi Pad)\\b",
+      "brand": "Xiaomi",
+      "category": "Tablet"
+    },
+    {
+      "pattern": "\\b(?:Xiaomi Book|Mi Notebook|Mi Laptop)\\b",
+      "brand": "Xiaomi",
+      "category": "Laptop"
+    },
+    {
+      "pattern": "\\b(?:Mi Smart Projector|Xiaomi Smart Projector|Wanbo)\\b",
+      "brand": "Xiaomi",
+      "category": "Cañón"
+    },
+    {
+      "pattern": "\\b(?:Mi Router|Xiaomi Router|AX\\d{4})\\b",
+      "brand": "Xiaomi",
+      "category": "Router"
+    },
+    {
+      "pattern": "\\b(?:Xiaomi \\d+|Mi \\d+|Mix Fold|Mix Flip)\\b",
+      "brand": "Xiaomi",
+      "category": "Celular"
+    },
+    {
+      "pattern": "\\bXiaomi\\b",
+      "brand": "Xiaomi",
+      "category": "Celular"
+    },
+    {
+      "pattern": "\\b(?:Realme Pad)\\b",
+      "brand": "Realme",
+      "category": "Tablet"
+    },
+    {
+      "pattern": "\\b(?:Realme Book)\\b",
+      "brand": "Realme",
+      "category": "Laptop"
+    },
+    {
+      "pattern": "\\b(?:Realme \\d+|Realme [CGT]\\d*|RMX\\d{4})\\b",
+      "brand": "Realme",
+      "category": "Celular"
+    },
+    {
+      "pattern": "\\bRealme\\b",
+      "brand": "Realme",
+      "category": "Celular"
+    },
+    {
+      "pattern": "\\b(?:Moto Tab)\\b",
+      "brand": "Motorola",
+      "category": "Tablet"
+    },
+    {
+      "pattern": "\\b(?:Motorola|moto [egxz]\\d*|Motorola Edge|Moto Razr|XT\\d{4})\\b",
+      "brand": "Motorola",
+      "category": "Celular"
+    },
+    {
+      "pattern": "\\b(?:ThinkPad|IdeaPad|ThinkBook|Yoga|Legion|LOQ)\\b",
+      "brand": "Lenovo",
+      "category": "Laptop"
+    },
+    {
+      "pattern": "\\b(?:Lenovo Tab|Tab [MP]\\d+|Xiaoxin Pad|TB-\\w+)\\b",
+      "brand": "Lenovo",
+      "category": "Tablet"
+    },
+    {
+      "pattern": "\\bLenovo\\b",
+      "brand": "Lenovo",
+      "category": "Laptop"
+    },
+    {
+      "pattern": "\\b(?:G-240W|G-140W|G-2425G|Nokia WiFi|Beacon)\\b",
+      "brand": "Nokia",
+      "category": "Router"
+    },
+    {
+      "pattern": "\\b(?:Nokia T\\d+)\\b",
+      "brand": "Nokia",
+      "category": "Tablet"
+    },
+    {
+      "pattern": "\\bNokia\\b",
+      "brand": "Nokia",
+      "category": "Celular"
+    },
+    {
+      "pattern": "\\b(?:Pixel Tablet)\\b",
+      "brand": "Google",
+      "category": "Tablet"
+    },
+    {
+      "pattern": "\\b(?:Pixelbook)\\b",
+      "brand": "Google",
+      "category": "Laptop"
+    },
+    {
+      "pattern": "\\b(?:Pixel Buds)\\b",
+      "brand": "Google",
+      "category": "Audífonos"
+    },
+    {
+      "pattern": "\\b(?:Pixel Watch)\\b",
+      "brand": "Google",
+      "category": "Reloj inteligente"
+    },
+    {
+      "pattern": "\\bPixel\\b",
+      "brand": "Google",
+      "category": "Celular"
+    },
+    {
+      "pattern": "\\b(?:OnePlus Pad)\\b",
+      "brand": "OnePlus",
+      "category": "Tablet"
+    },
+    {
+      "pattern": "\\bOnePlus\\b",
+      "brand": "OnePlus",
+      "category": "Celular"
+    },
+    {
+      "pattern": "\\b(?:VPL-[A-Z0-9-]+|Sony Projector)\\b",
+      "brand": "Sony",
+      "category": "Cañón"
+    },
+    {
+      "pattern": "\\b(?:VAIO)\\b",
+      "brand": "Sony",
+      "category": "Laptop"
+    },
+    {
+      "pattern": "\\b(?:Xperia)\\b",
+      "brand": "Sony",
+      "category": "Celular"
+    },
+    {
+      "pattern": "\\b(?:WH-1000|WF-1000|LinkBuds)\\b",
+      "brand": "Sony",
+      "category": "Audífonos"
+    },
+    {
+      "pattern": "\\b(?:SRS-[A-Z0-9]+)\\b",
+      "brand": "Sony",
+      "category": "Altavoz"
+    },
+    {
+      "pattern": "\\b(?:BRAVIA)\\b",
+      "brand": "Sony",
+      "category": "Smart TV"
+    },
+    {
+      "pattern": "\\bSony\\b",
+      "brand": "Sony"
+    },
+    {
+      "pattern": "\\b(?:ZenBeam)\\b",
+      "brand": "ASUS",
+      "category": "Cañón"
+    },
+    {
+      "pattern": "\\b(?:RT-AX|RT-AC|GT-AX|ZenWiFi|ASUS_\\w+)\\b",
+      "brand": "ASUS",
+      "category": "Router"
+    },
+    {
+      "pattern": "\\b(?:ROG Phone|Zenfone)\\b",
+      "brand": "ASUS",
+      "category": "Celular"
+    },
+    {
+      "pattern": "\\b(?:ZenBook|VivoBook|ExpertBook|ROG Zephyrus|ROG Strix|TUF Gaming)\\b",
+      "brand": "ASUS",
+      "category": "Laptop"
+    },
+    {
+      "pattern": "\\bASUS\\b",
+      "brand": "ASUS",
+      "category": "Laptop"
+    },
+    {
+      "pattern": "\\b(?:ZXHN|F6[678]0|F6600|ZTE_\\w+|MF28\\d|MF29\\d)\\b",
+      "brand": "ZTE",
+      "category": "Router"
+    },
+    {
+      "pattern": "\\b(?:ZTE Blade|Nubia|Axon)\\b",
+      "brand": "ZTE",
+      "category": "Celular"
+    },
+    {
+      "pattern": "\\bZTE\\b",
+      "brand": "ZTE"
+    },
+    {
+      "pattern": "\\b(?:TCL Tab)\\b",
+      "brand": "TCL",
+      "category": "Tablet"
+    },
+    {
+      "pattern": "\\b(?:TCL \\d{2}|TCL Plex)\\b",
+      "brand": "TCL",
+      "category": "Celular"
+    },
+    {
+      "pattern": "\\bTCL\\b",
+      "brand": "TCL"
+    },
+    {
+      "pattern": "\\b(?:MEGAWATT|Spark|Camon|Phantom|Pova|Tecno)\\b",
+      "brand": "Tecno",
+      "category": "Celular"
+    },
+    {
+      "pattern": "\\b(?:InBook)\\b",
+      "brand": "Infinix",
+      "category": "Laptop"
+    },
+    {
+      "pattern": "\\b(?:XPAD)\\b",
+      "brand": "Infinix",
+      "category": "Tablet"
+    },
+    {
+      "pattern": "\\bInfinix\\b",
+      "brand": "Infinix",
+      "category": "Celular"
+    },
+    {
+      "pattern": "\\bitel\\b",
+      "brand": "Itel",
+      "category": "Celular"
+    },
+    {
+      "pattern": "\\b(?:LaserJet|DeskJet|OfficeJet|Smart Tank|Ink Tank|PageWide|DesignJet|Neverstop|HP MFP|DIRECT-.*HP)\\b",
+      "brand": "HP",
+      "category": "Impresora"
+    },
+    {
+      "pattern": "\\b(?:Pavilion|EliteBook|ProBook|Spectre|Victus|Omen|ZBook|HP Laptop|HP Notebook|Envy x360)\\b",
+      "brand": "HP",
+      "category": "Laptop"
+    },
+    {
+      "pattern": "\\bHP\\b",
+      "brand": "HP"
+    },
+    {
+      "pattern": "\\b(?:Latitude|Inspiron|XPS|Vostro|Precision|Alienware|Dell G1[56])\\b",
+      "brand": "Dell",
+      "category": "Laptop"
+    },
+    {
+      "pattern": "\\bDell\\b",
+      "brand": "Dell",
+      "category": "Laptop"
+    },
+    {
+      "pattern": "\\b(?:Iconia)\\b",
+      "brand": "Acer",
+      "category": "Tablet"
+    },
+    {
+      "pattern": "\\b(?:Acer Projector)\\b",
+      "brand": "Acer",
+      "category": "Cañón"
+    },
+    {
+      "pattern": "\\b(?:Aspire|Nitro|Swift|Predator|TravelMate|Extensa|Spin)\\b",
+      "brand": "Acer",
+      "category": "Laptop"
+    },
+    {
+      "pattern": "\\bAcer\\b",
+      "brand": "Acer",
+      "category": "Laptop"
+    },
+    {
+      "pattern": "\\b(?:Katana|Cyborg|Stealth|Raider|Vector|Prestige|Modern|Summit|Thin GF|Bravo|Pulse)\\b",
+      "brand": "MSI",
+      "category": "Laptop"
+    },
+    {
+      "pattern": "\\bMSI\\b",
+      "brand": "MSI",
+      "category": "Laptop"
+    },
+    {
+      "pattern": "\\b(?:Surface Pro|Surface Go)\\b",
+      "brand": "Microsoft",
+      "category": "Tablet"
+    },
+    {
+      "pattern": "\\b(?:Surface Laptop|Surface Book|Surface Studio)\\b",
+      "brand": "Microsoft",
+      "category": "Laptop"
+    },
+    {
+      "pattern": "\\bMicrosoft\\b",
+      "brand": "Microsoft",
+      "category": "Laptop"
+    },
+    {
+      "pattern": "\\b(?:Satellite|Portege|Tecra|Dynabook|Toshiba)\\b",
+      "brand": "Toshiba",
+      "category": "Laptop"
+    },
+    {
+      "pattern": "\\b(?:Lifebook|Fujitsu)\\b",
+      "brand": "Fujitsu",
+      "category": "Laptop"
+    },
+    {
+      "pattern": "\\b(?:AORUS|AERO|Gigabyte)\\b",
+      "brand": "Gigabyte",
+      "category": "Laptop"
+    },
+    {
+      "pattern": "\\b(?:PowerLite|BrightLink|Home Cinema|Pro EX|EpiqVision|EB-[A-Z0-9]+|EH-TW\\d+|EF-\\d+|CO-(?:W|FH)\\d+|EPSON[_ -]?PJ|EPSON[_ -]?Projector|DIRECT-.*EPSONPJ|ELPAP\\d+)\\b",
+      "brand": "Epson",
+      "category": "Cañón"
+    },
+    {
+      "pattern": "\\b(?:EcoTank|WorkForce|Expression|SureColor|Stylus|EPSON L\\d{3,4}|L[3456]\\d{3}|ET-\\d{4}|WF-\\d{4}|XP-\\d{3}|DIRECT-.*EPSON)\\b",
+      "brand": "Epson",
+      "category": "Impresora"
+    },
+    {
+      "pattern": "\\bEpson\\b",
+      "brand": "Epson"
+    },
+    {
+      "pattern": "\\b(?:PIXMA|MAXIFY|imageRUNNER|i-SENSYS|imageCLASS|SELPHY|Canon G\\d{4}|MG\\d{4}|TS\\d{4}|TR\\d{4}|LBP\\d+|Canon_ij|DIRECT-.*Canon)\\b",
+      "brand": "Canon",
+      "category": "Impresora"
+    },
+    {
+      "pattern": "\\bCanon\\b",
+      "brand": "Canon",
+      "category": "Impresora"
+    },
+    {
+      "pattern": "\\b(?:HL-[A-Z0-9-]+|DCP-[A-Z0-9-]+|MFC-[A-Z0-9-]+|QL-\\d+|DIRECT-.*Brother|Brother)\\b",
+      "brand": "Brother",
+      "category": "Impresora"
+    },
+    {
+      "pattern": "\\b(?:WorkCentre|Phaser|VersaLink|AltaLink|Xerox)\\b",
+      "brand": "Xerox",
+      "category": "Impresora"
+    },
+    {
+      "pattern": "\\b(?:RICOH PJ|Ricoh Projector)\\b",
+      "brand": "Ricoh",
+      "category": "Cañón"
+    },
+    {
+      "pattern": "\\b(?:Aficio|IM C\\d+|MP C\\d+|Ricoh)\\b",
+      "brand": "Ricoh",
+      "category": "Impresora"
+    },
+    {
+      "pattern": "\\b(?:ECOSYS|TASKalfa|Kyocera)\\b",
+      "brand": "Kyocera",
+      "category": "Impresora"
+    },
+    {
+      "pattern": "\\b(?:ZD\\d{3}|ZT\\d{3}|ZQ\\d{3}|GK420|Zebra)\\b",
+      "brand": "Zebra",
+      "category": "Impresora"
+    },
+    {
+      "pattern": "\\b(?:bizhub|Konica Minolta)\\b",
+      "brand": "Konica Minolta",
+      "category": "Impresora"
+    },
+    {
+      "pattern": "\\b(?:Lexmark)\\b",
+      "brand": "Lexmark",
+      "category": "Impresora"
+    },
+    {
+      "pattern": "\\b(?:Pantum)\\b",
+      "brand": "Pantum",
+      "category": "Impresora"
+    },
+    {
+      "pattern": "\\b(?:BenQ|MW\\d{3}[A-Z]?|MX\\d{3}[A-Z]?|MS\\d{3}[A-Z]?|MH\\d{3}[A-Z]?|TH\\d{3}[A-Z]?|TK\\d{3}[A-Z]?|GV\\d{2}|InstaShow)\\b",
+      "brand": "BenQ",
+      "category": "Cañón"
+    },
+    {
+      "pattern": "\\b(?:Optoma|HD\\d{2,3}X?|GT\\d{4}|UHZ\\d{2}|EH\\d{3}|ZW\\d{3})\\b",
+      "brand": "Optoma",
+      "category": "Cañón"
+    },
+    {
+      "pattern": "\\b(?:ViewSonic|PA50\\d|PX7\\d{2}|PG\\d{3}|LS\\d{3})\\b",
+      "brand": "ViewSonic",
+      "category": "Cañón"
+    },
+    {
+      "pattern": "\\b(?:InFocus|IN\\d{3,4}|LightPro)\\b",
+      "brand": "InFocus",
+      "category": "Cañón"
+    },
+    {
+      "pattern": "\\b(?:PT-LB\\d+|PT-VX\\d+|PT-VMZ\\d+|PT-VW\\d+|PT-RZ\\d+|PANASONIC-PJ|Panasonic Projector|Panasonic)\\b",
+      "brand": "Panasonic",
+      "category": "Cañón"
+    },
+    {
+      "pattern": "\\b(?:Toughbook)\\b",
+      "brand": "Panasonic",
+      "category": "Laptop"
+    },
+    {
+      "pattern": "\\b(?:NP-[A-Z]{1,3}\\d+|NEC Projector|NEC)\\b",
+      "brand": "NEC",
+      "category": "Cañón"
+    },
+    {
+      "pattern": "\\b(?:CineBeam|PF\\d{3,4}|HU\\d{3,4}|LG Projector)\\b",
+      "brand": "LG",
+      "category": "Cañón"
+    },
+    {
+      "pattern": "\\b(?:LG Gram)\\b",
+      "brand": "LG",
+      "category": "Laptop"
+    },
+    {
+      "pattern": "\\b(?:XGIMI|MoGo|Elfin|Halo\\+)\\b",
+      "brand": "XGIMI",
+      "category": "Cañón"
+    },
+    {
+      "pattern": "\\b(?:Nebula Capsule|Nebula Mars|Nebula Cosmos|Anker)\\b",
+      "brand": "Anker",
+      "category": "Cañón"
+    },
+    {
+      "pattern": "\\b(?:Vivitek)\\b",
+      "brand": "Vivitek",
+      "category": "Cañón"
+    },
+    {
+      "pattern": "\\b(?:Christie)\\b",
+      "brand": "Christie",
+      "category": "Cañón"
+    },
+    {
+      "pattern": "\\b(?:Casio-PJ|XJ-[A-Z]\\d{3}|Casio)\\b",
+      "brand": "Casio",
+      "category": "Cañón"
+    },
+    {
+      "pattern": "\\b(?:Archer|Deco|TL-WR\\d+|TL-WA\\d+|TL-MR\\d+|EAP\\d+|Omada|TP-Link|TP-LINK)\\b",
+      "brand": "TP-Link",
+      "category": "Router"
+    },
+    {
+      "pattern": "\\b(?:D-Link|DIR-\\d+|DAP-\\d+|COVR)\\b",
+      "brand": "D-Link",
+      "category": "Router"
+    },
+    {
+      "pattern": "\\b(?:Cisco|Meraki|Catalyst|Aironet|Linksys|Velop)\\b",
+      "brand": "Cisco",
+      "category": "Router"
+    },
+    {
+      "pattern": "\\b(?:MikroTik|RouterBOARD|hAP|cAP|wAP|RB\\d{3,4}|CCR\\d+|CRS\\d+)\\b",
+      "brand": "MikroTik",
+      "category": "Router"
+    },
+    {
+      "pattern": "\\b(?:Ubiquiti|UniFi|UAP-[A-Z0-9-]+|U6-[A-Z0-9-]+|U7-[A-Z0-9-]+|UDM|AmpliFi|NanoStation|LiteBeam|EdgeRouter|UBNT)\\b",
+      "brand": "Ubiquiti",
+      "category": "Router"
+    },
+    {
+      "pattern": "\\b(?:Tenda|Tenda_\\w+|TX\\d+|AC\\d{1,2}|N301)\\b",
+      "brand": "Tenda",
+      "category": "Router"
+    },
+    {
+      "pattern": "\\b(?:Mercusys|MR\\d{2,4}X?|MW3\\d{2}R)\\b",
+      "brand": "Mercusys",
+      "category": "Router"
+    },
+    {
+      "pattern": "\\b(?:Netgear|Nighthawk|Orbi|RAX\\d+|WAX\\d+)\\b",
+      "brand": "Netgear",
+      "category": "Router"
+    },
+    {
+      "pattern": "\\b(?:Aruba|Instant On|IAP-\\d{3}|AP-\\d{3})\\b",
+      "brand": "Aruba",
+      "category": "Router"
+    },
+    {
+      "pattern": "\\b(?:FortiGate|FortiAP|FortiWiFi)\\b",
+      "brand": "Fortinet",
+      "category": "Router"
+    },
+    {
+      "pattern": "\\b(?:Ruckus|ZoneFlex|Unleashed)\\b",
+      "brand": "Ruckus",
+      "category": "Router"
+    },
+    {
+      "pattern": "\\b(?:TG24[89]2|TG3442|Arris)\\b",
+      "brand": "Arris",
+      "category": "Router"
+    },
+    {
+      "pattern": "\\b(?:RTF8115|GPT-2741|MitraStar)\\b",
+      "brand": "MitraStar",
+      "category": "Router"
+    },
+    {
+      "pattern": "\\b(?:CGN[V2-5]*|CODA-\\d+|Hitron)\\b",
+      "brand": "Hitron",
+      "category": "Router"
+    },
+    {
+      "pattern": "\\b(?:Sagemcom|FAST\\d{4})\\b",
+      "brand": "Sagemcom",
+      "category": "Router"
+    },
+    {
+      "pattern": "\\bHMD\\b",
+      "brand": "HMD",
+      "category": "Celular"
+    }
+  ],
+  "categories": [
+    {
+      "pattern": "\\b(?:Galaxy Watch|Apple Watch|smartwatch|Watch GT|Watch Fit|Pixel Watch|Amazfit)\\b",
+      "category": "Reloj inteligente"
+    },
+    {
+      "pattern": "\\b(?:projector|proyector|cañ[oó]n|canon multimedia|PowerLite|BrightLink|CineBeam|Optoma|ViewSonic|BenQ|InFocus|VPL-[A-Z0-9]+|EB-[A-Z0-9]+|EH-TW\\d+|PT-LB\\d+|PT-VX\\d+|PT-VMZ\\d+|NP-[A-Z]{1,3}\\d+|EPSON[_ -]?PJ|DIRECT-.*EPSONPJ|PANASONIC-PJ|Casio-PJ|The Freestyle|XGIMI|Wanbo|Vivitek|Christie)\\b",
+      "category": "Cañón"
+    },
+    {
+      "pattern": "\\b(?:printer|impresora|LaserJet|OfficeJet|DeskJet|Smart Tank|Ink Tank|PageWide|DesignJet|EcoTank|WorkForce|SureColor|PIXMA|MAXIFY|imageRUNNER|imageCLASS|HL-[A-Z0-9-]+|DCP-[A-Z0-9-]+|MFC-[A-Z0-9-]+|WorkCentre|VersaLink|AltaLink|Phaser|ECOSYS|TASKalfa|Aficio|bizhub|Lexmark|Pantum|Zebra ZD|Zebra ZT|DIRECT-.*(?:HP|EPSON|Canon|Brother|Print|MFP))\\b",
+      "category": "Impresora"
+    },
+    {
+      "pattern": "\\b(?:router|enrutador|Archer|Deco|MikroTik|RouterBOARD|UniFi|UAP-|UDM|NanoStation|LiteBeam|Nighthawk|Orbi|ZXHN|HG8\\d{3}|EG8\\d{3}|FortiAP|FortiGate|Meraki|MOVISTAR_\\w+|CLARO_\\w+|WIN_\\w+|ENTEL_\\w+|BITEL_\\w+|TP-Link_\\w+|Tenda_\\w+|Mercusys_\\w+|D-Link_\\w+)\\b",
+      "category": "Router"
+    },
+    {
+      "pattern": "\\b(?:iPad|HONOR Pad|Galaxy Tab|MatePad|MediaPad|Redmi Pad|Xiaomi Pad|Mi Pad|Lenovo Tab|Tab [MP]\\d+|Surface Pro|Surface Go|Realme Pad|OPPO Pad|Vivo Pad|OnePlus Pad|Pixel Tablet|Iconia|Fire HD|tablet)\\b",
+      "category": "Tablet"
+    },
+    {
+      "pattern": "\\b(?:ThinkPad|MacBook|MagicBook|Galaxy Book|MateBook|IdeaPad|ThinkBook|Yoga|Legion|LOQ|Pavilion|EliteBook|ProBook|Spectre|Victus|Omen|ZBook|Latitude|Inspiron|XPS|Vostro|Alienware|ZenBook|VivoBook|ExpertBook|Zephyrus|TUF Gaming|Aspire|Nitro|Swift|Predator|TravelMate|Katana|Cyborg|Stealth|Raider|Surface Laptop|Surface Book|LG Gram|Toughbook|Lifebook|Dynabook|LAPTOP-[A-Z0-9]+|DESKTOP-[A-Z0-9]+|laptop|notebook|ultrabook)\\b",
+      "category": "Laptop"
+    },
+    {
+      "pattern": "\\b(?:iPhone|Galaxy S\\d+|Galaxy A\\d+|Galaxy M\\d+|Galaxy Z|Galaxy Note|Redmi Note|Redmi \\d+|POCO [FXMC]\\d+|moto [egxz]\\d*|Motorola Edge|Moto Razr|Pixel \\d+|OnePlus \\d+|OPPO Reno|OPPO Find|Vivo [VYX]\\d+|Realme \\d+|Xperia|HUAWEI P\\d+|HUAWEI nova|HONOR \\d+|HONOR X\\d+|HONOR Magic|Infinix|Tecno|Spark|Camon|AndroidAP|celular|smartphone)\\b",
+      "category": "Celular"
+    },
+    {
+      "pattern": "\\b(?:speaker|altavoz|SoundLink|Flip \\d|Charge \\d|SRS-)\\b",
+      "category": "Altavoz"
+    },
+    {
+      "pattern": "\\b(?:Smart[ -]?TV|BRAVIA|WebOS|Tizen|Roku TV|Fire TV)\\b",
+      "category": "Smart TV"
+    },
+    {
+      "pattern": "\\b(?:camera|cámara|webcam|GoPro|Insta360)\\b",
+      "category": "Cámara"
+    },
+    {
+      "pattern": "\\b(?:headphones|earbuds|audífonos|AirPods|Galaxy Buds|FreeBuds|Redmi Buds|WH-1000|WF-1000)\\b",
+      "category": "Audífonos"
+    },
+    {
+      "pattern": "\\b(?:IoT|ESP32|ESP8266|Tuya|Sonoff|Shelly)\\b",
+      "category": "IoT"
+    },
+    {
+      "pattern": "\\b(?:PlayStation|Xbox|Nintendo Switch)\\b",
+      "category": "Consola"
+    }
+  ],
+  "vendor_defaults": {
+    "Cañón": [
+      "BenQ",
+      "Optoma",
+      "ViewSonic",
+      "InFocus",
+      "Christie",
+      "Barco",
+      "Vivitek",
+      "XGIMI",
+      "Panasonic",
+      "NEC",
+      "Casio",
+      "Sharp",
+      "Anker"
+    ],
+    "Impresora": [
+      "Canon",
+      "Brother",
+      "Xerox",
+      "Ricoh",
+      "Kyocera",
+      "Zebra",
+      "Konica Minolta",
+      "Lexmark",
+      "Pantum",
+      "Star Micronics",
+      "Bixolon",
+      "Riso",
+      "Epson"
+    ],
+    "Router": [
+      "TP-Link",
+      "D-Link",
+      "Cisco",
+      "MikroTik",
+      "Ubiquiti",
+      "Tenda",
+      "Mercusys",
+      "Netgear",
+      "Aruba",
+      "Fortinet",
+      "Ruckus",
+      "Juniper",
+      "Extreme Networks",
+      "Cambium",
+      "DrayTek",
+      "Sagemcom",
+      "MitraStar",
+      "Arris",
+      "Hitron",
+      "Calix",
+      "FiberHome",
+      "Alcatel",
+      "Arcadyan",
+      "Gemtek",
+      "Sercomm",
+      "CyberTAN",
+      "Compal Broadband"
+    ],
+    "Laptop": [
+      "Dell",
+      "Acer",
+      "MSI",
+      "Toshiba",
+      "Fujitsu",
+      "Gigabyte",
+      "Razer",
+      "Framework",
+      "Clevo",
+      "HP",
+      "Lenovo",
+      "ASUS",
+      "Microsoft",
+      "Compal (Laptop)",
+      "Quanta (Laptop)",
+      "Wistron (Laptop)",
+      "Chicony (Laptop)",
+      "Foxconn"
+    ],
+    "Tablet": [
+      "Alldocube",
+      "Chuwi",
+      "Wacom",
+      "Amazon"
+    ],
+    "Celular": [
+      "Samsung",
+      "Apple",
+      "Xiaomi",
+      "Redmi",
+      "POCO",
+      "Motorola",
+      "OPPO",
+      "Vivo",
+      "Realme",
+      "OnePlus",
+      "Google",
+      "Honor",
+      "Huawei",
+      "Tecno",
+      "Infinix",
+      "Itel",
+      "HMD",
+      "Nokia",
+      "ZTE",
+      "Sony",
+      "TCL",
+      "Nothing",
+      "Fairphone",
+      "Meizu",
+      "Nubia",
+      "BlackShark",
+      "Doogee",
+      "BLU",
+      "Transsion"
+    ]
+  }
+}
