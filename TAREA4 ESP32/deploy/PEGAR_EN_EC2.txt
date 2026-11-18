@@ -1,0 +1,357 @@
+(
+set -eu
+cd "$HOME/SISTEMASEMBEBIDOS/TAREA4 ESP32"
+test -f backend/main.py
+usb_patch=$(mktemp)
+trap 'rm -f "$usb_patch"' EXIT
+cat > "$usb_patch" <<'FIN_CAMBIO_USB'
+--- a/backend/main.py
++++ b/backend/main.py
+@@ -25,6 +25,42 @@
+     def __init__(self): super().__init__(ROOT,DATA)
+ 
+ runtime=None
++
++def browser_origin():
++    return os.environ.get("DETECTOR_USB_ORIGIN", "")
++
++async def ingest_serial(rt, framer, raw):
++    before=framer.dropped
++    records=framer.feed(raw)
++    rt.invalid+=framer.dropped-before
++    if framer.dropped>before:rt.error('Línea serial excesiva descartada.','protocol')
++    for buffer in records:
++        try:
++            event=parse_line(buffer)
++            rt.last_event=time.time()
++            if hasattr(event,'mac'):
++                rt.last_detection=time.time();rt.received_observations+=1;change=None
++                if rt.store:
++                    try:change=await asyncio.to_thread(rt.store.ingest,event,time.time())
++                    except sqlite3.Error as error:
++                        rt.storage_dropped+=1;rt.db_error=str(error);rt.error('No se pudo guardar una observación.','sqlite')
++                else:rt.storage_dropped+=1
++                if change and (change['new'] or change['returned']): rt.new_events=(rt.new_events+[dict(**change,time=time.time())])[-20:]
++            elif event['event'] in ('status','heartbeat'):
++                was_ready=rt.status.get('boot_id') != event.get('boot_id')
++                if rt.last_status and was_ready:
++                    rt.firmware_restarts+=1;rt.error('Nuevo arranque ESP32: '+str(event.get('reset_reason','motivo no informado')),'firmware')
++                rt.status=event;rt.last_status=time.time()
++                if was_ready or rt.applied is None and rt.pending is None:
++                    queue_config(rt)
++            elif event['event']=='ack':
++                if event.get('id')==rt.pending:
++                    rt.applied=event; rt.pending=None
++            elif event['event']=='error': rt.error(event.get('message','Error firmware'))
++        except (ValueError,UnicodeError) as e:
++            rt.invalid+=1
++            if 'protocolo' in str(e):rt.protocol_errors+=1
++            if buffer.lstrip().startswith(b'{'): rt.error('Evento serial inválido: '+str(e)[:160],'protocol')
+ 
+ async def serial_loop(rt):
+     import serial
+@@ -43,37 +79,7 @@
+                     await asyncio.to_thread(port.write,(json.dumps(command)+'\n').encode())
+                 raw=await asyncio.to_thread(port.read_until,b'\n',512)
+                 if not raw: continue
+-                before=framer.dropped
+-                records=framer.feed(raw)
+-                rt.invalid+=framer.dropped-before
+-                if framer.dropped>before:rt.error('Línea serial excesiva descartada.','protocol')
+-                for buffer in records:
+-                    try:
+-                        event=parse_line(buffer)
+-                        rt.last_event=time.time()
+-                        if hasattr(event,'mac'):
+-                            rt.last_detection=time.time();rt.received_observations+=1;change=None
+-                            if rt.store:
+-                                try:change=await asyncio.to_thread(rt.store.ingest,event,time.time())
+-                                except sqlite3.Error as error:
+-                                    rt.storage_dropped+=1;rt.db_error=str(error);rt.error('No se pudo guardar una observación.','sqlite')
+-                            else:rt.storage_dropped+=1
+-                            if change and (change['new'] or change['returned']): rt.new_events=(rt.new_events+[dict(**change,time=time.time())])[-20:]
+-                        elif event['event'] in ('status','heartbeat'):
+-                            was_ready=rt.status.get('boot_id') != event.get('boot_id')
+-                            if rt.last_status and was_ready:
+-                                rt.firmware_restarts+=1;rt.error('Nuevo arranque ESP32: '+str(event.get('reset_reason','motivo no informado')),'firmware')
+-                            rt.status=event;rt.last_status=time.time()
+-                            if was_ready or rt.applied is None and rt.pending is None:
+-                                queue_config(rt)
+-                        elif event['event']=='ack':
+-                            if event.get('id')==rt.pending:
+-                                rt.applied=event; rt.pending=None
+-                        elif event['event']=='error': rt.error(event.get('message','Error firmware'))
+-                    except (ValueError,UnicodeError) as e:
+-                        rt.invalid+=1
+-                        if 'protocolo' in str(e):rt.protocol_errors+=1
+-                        if buffer.lstrip().startswith(b'{'): rt.error('Evento serial inválido: '+str(e)[:160],'protocol')
++                await ingest_serial(rt, framer, raw)
+         except asyncio.CancelledError: raise
+         except (serial.SerialException,OSError) as e:
+             msg='Puerto serial no disponible (inexistente, ocupado o desconectado): '+str(e)
+@@ -119,7 +125,11 @@
+ async def lifespan(app):
+     global runtime
+     runtime=Runtime()
+-    tasks=[asyncio.create_task(serial_loop(runtime)),asyncio.create_task(housekeeping(runtime)),asyncio.create_task(lan_loop(runtime))]
++    tasks=[asyncio.create_task(housekeeping(runtime)),asyncio.create_task(lan_loop(runtime))]
++    if browser_origin():
++        runtime.serial_task_state = "waiting_browser"
++    else:
++        tasks.append(asyncio.create_task(serial_loop(runtime)))
+     try: yield
+     finally:
+         for task in tasks: task.cancel()
+@@ -226,6 +236,47 @@
+         writer.writerow(safe)
+     return Response('\ufeff'+output.getvalue(),media_type='text/csv',headers={'Content-Disposition':'attachment; filename=dispositivos.csv'})
+ 
++@app.websocket('/api/browser-usb')
++async def browser_usb(ws: WebSocket):
++    rt = runtime
++    origin = browser_origin()
++    if not origin or ws.headers.get("origin") != origin or rt.connected:
++        await ws.close(code=1008)
++        return
++    # Claim before the first await so two tabs cannot interleave USB data.
++    rt.connected = True
++    rt.status = {}
++    rt.applied = rt.pending = None
++    rt.last_status = 0
++    rt.serial_task_state = "browser_usb"
++    rt.reconnects += 1
++    while not rt.commands.empty():
++        rt.commands.get_nowait()
++    framer = SerialFramer()
++    try:
++        await ws.accept()
++        await ws.send_json({"ready": True})
++        while True:
++            while not rt.commands.empty():
++                await ws.send_json({"command": rt.commands.get_nowait()})
++            try:
++                message = await asyncio.wait_for(ws.receive(), timeout=0.2)
++            except asyncio.TimeoutError:
++                continue
++            if message["type"] == "websocket.disconnect":
++                break
++            chunk = message.get("bytes")
++            if chunk is None or len(chunk) > 16384:
++                await ws.close(code=1003)
++                break
++            await ingest_serial(rt, framer, chunk)
++    except (WebSocketDisconnect, OSError):
++        pass
++    finally:
++        rt.connected = False
++        rt.pending = None
++        rt.serial_task_state = "waiting_browser"
++
+ @app.websocket('/ws')
+ async def websocket(ws:WebSocket):
+     if ws.headers.get('origin') not in ('http://localhost:8000','http://127.0.0.1:8000'):
+@@ -244,6 +295,11 @@
+ def index():
+     path=ROOT/'frontend/index.html'
+     if not path.exists():return HTMLResponse('<h1>Panel HTML no encontrado</h1><p>Conserva la carpeta frontend junto al backend.</p><a href="/api/diagnostics">Diagnóstico</a>',status_code=503)
++    if browser_origin():
++        page = path.read_text(encoding='utf-8')
++        control = '<button id="usbConnect" type="button">Conectar ESP32</button><span id="usbMessage" role="status"></span>'
++        page = page.replace('<time id="clock">', control + '<time id="clock">')
++        return HTMLResponse(page.replace('</head>', '<script src="/assets/web-serial.js" defer></script></head>'))
+     return FileResponse(path)
+ 
+ @app.post('/api/scanner/recover')
+--- a/backend/runtime.py
++++ b/backend/runtime.py
+@@ -50,7 +50,7 @@
+         active=any(x['active'] for x in scanners.values());database=bool(self.store and not self.db_error)
+         return dict(service='esp32-detector',api_version='2.2.0',status='ok' if database else 'degraded',backend=dict(active=True,uptime_seconds=round(now-self.started,1)),
+             database=dict(available=database,error=self.db_error or None,schema_version=2 if database else None),
+-            serial=dict(connected=self.connected,port=self.settings.port,error=self.serial_error or None,worker=self.serial_task_state),
++            serial=dict(connected=self.connected,port='USB del navegador' if self.serial_task_state in ('browser_usb','waiting_browser') else self.settings.port,error=self.serial_error or None,worker=self.serial_task_state),
+             firmware=dict(responding=responding,version=self.status.get('firmware'),protocol_version=self.status.get('v'),last_status=self.last_status or None,reset_count=self.firmware_restarts),
+             scanners=scanners,scanner_active=active,message='ESP32 conectado — escáner activo' if active else 'ESP32 conectado — escaneo no confirmado (firmware v1)' if responding and self.status.get('v',1)==1 else 'ESP32 conectado — esperando turno de escaneo' if responding else 'Puerto serial abierto — firmware sin respuesta' if self.connected else 'ESP32 desconectado — esperando conexión serial',configuration_error=self.config_error or None)
+     def diagnostics(self):
+--- /dev/null
++++ b/frontend/web-serial.js
+@@ -0,0 +1,75 @@
++(() => {
++  const button = document.querySelector('#usbConnect');
++  const message = document.querySelector('#usbMessage');
++  const encoder = new TextEncoder();
++  let disconnect;
++
++  async function connect() {
++    button.disabled = true;
++    let port, reader, writer, socket, opened;
++    let writes = Promise.resolve();
++    let stopped = false;
++    let reason = 'ESP32 desconectado.';
++    const stop = (text) => {
++      if (stopped) return;
++      stopped = true;
++      reason = text;
++      button.disabled = true;
++      if (socket && socket.readyState < WebSocket.CLOSING) socket.close();
++      if (reader) reader.cancel().catch(() => {});
++    };
++    try {
++      port = await navigator.serial.requestPort();
++      await port.open({baudRate: 115200});
++      opened = true;
++      reader = port.readable.getReader();
++      writer = port.writable.getWriter();
++      socket = new WebSocket('wss://' + location.host + '/api/browser-usb');
++      await new Promise((resolve, reject) => {
++        socket.onmessage = event => {
++          if (JSON.parse(event.data).ready) resolve();
++        };
++        socket.onclose = socket.onerror = () => reject(new Error('EC2 rechazó la conexión. Comprueba si otra pestaña ya usa el detector.'));
++      });
++      socket.onclose = socket.onerror = () => stop('Se perdió la conexión con EC2. Vuelve a conectar.');
++      socket.onmessage = event => {
++        const {command} = JSON.parse(event.data);
++        writes = writes.then(() => writer.write(encoder.encode(JSON.stringify(command) + '\n')))
++          .catch(() => stop('Falló la escritura al ESP32.'));
++      };
++      disconnect = () => stop('ESP32 desconectado.');
++      button.textContent = 'Desconectar ESP32';
++      button.disabled = false;
++      message.textContent = 'USB conectado';
++      while (!stopped) {
++        const {done, value} = await reader.read();
++        if (done || stopped) break;
++        for (let offset = 0; offset < value.length; offset += 16384) {
++          if (socket.bufferedAmount > 262144) throw new Error('La conexión con EC2 está saturada. Vuelve a conectar.');
++          socket.send(value.subarray(offset, offset + 16384));
++        }
++      }
++    } catch (error) {
++      reason = error.name === 'NotFoundError' ? 'Selección cancelada.' : error.message;
++    } finally {
++      stop(reason);
++      if (writer) {
++        await writer.abort().catch(() => {});
++        await writes;
++        writer.releaseLock();
++      }
++      if (reader) reader.releaseLock();
++      if (opened) await port.close().catch(() => {});
++      message.textContent = reason;
++      disconnect = undefined;
++      button.textContent = 'Conectar ESP32';
++      button.disabled = false;
++    }
++  }
++  if (!window.isSecureContext || !navigator.serial) {
++    button.disabled = true;
++    message.textContent = 'Abre el panel por HTTPS en Chrome o Edge de escritorio.';
++  } else {
++    button.onclick = () => disconnect ? disconnect() : connect();
++  }
++})();
+--- /dev/null
++++ b/deploy/browser-usb-https.sh
+@@ -0,0 +1,89 @@
++#!/usr/bin/env bash
++# Run inside the project directory, on the existing Ubuntu instance.
++set -euo pipefail
++ip=${1:?Indica la IPv4 pública de EC2}
++python3 -c 'import ipaddress,sys; ipaddress.IPv4Address(sys.argv[1])' "$ip"
++site=/etc/nginx/sites-available/esp32-panel-web
++root=/var/www/esp32-acme
++hook=/etc/letsencrypt/renewal-hooks/deploy/esp32-nginx
++test -f "$site"
++test -f /etc/systemd/system/esp32-panel.service
++test -x .venv/bin/python
++.venv/bin/python -c 'from backend.main import browser_usb'
++tmp=$(mktemp -d)
++trap 'rm -rf "$tmp"' EXIT
++mkdir -p "$root/.well-known/acme-challenge"
++apply_site() {
++    cp "$site" "$tmp/previous"
++    install -m 644 "$1" "$site"
++    if ! nginx -t || ! systemctl reload nginx; then
++        cp "$tmp/previous" "$site"
++        nginx -t && systemctl reload nginx
++        exit 1
++    fi
++}
++cat > "$tmp/http" <<NGINX
++server {
++    listen 80;
++    server_name ${ip};
++    location ^~ /.well-known/acme-challenge/ { root ${root}; try_files \$uri =404; }
++    location / { return 308 https://${ip}\$request_uri; }
++}
++NGINX
++if [ ! -f "$site.before-browser-usb" ]; then cp -p "$site" "$site.before-browser-usb"; fi
++# Keep a working TLS site available if this installer runs again.
++if ! grep -Fq "root ${root};" "$site"; then apply_site "$tmp/http"; fi
++echo 'En el grupo de seguridad de esta EC2: HTTP 80 desde 0.0.0.0/0 para validar y renovar el certificado; HTTPS 443 desde Mi IP para el panel. Conserva las reglas SSH.'
++read -rp 'Después de guardar las reglas, pulsa Enter para continuar. '
++if ! test -x /snap/bin/certbot; then snap install --classic certbot; fi
++/snap/bin/certbot certonly --webroot -w "$root" --preferred-profile shortlived --ip-address "$ip" --cert-name "esp32-${ip}" --agree-tos --register-unsafely-without-email --non-interactive --keep-until-expiring
++cp "$tmp/http" "$tmp/site"
++cat >> "$tmp/site" <<NGINX
++map \$http_upgrade \$esp_usb_upgrade {
++    default upgrade;
++    "" close;
++}
++map \$http_origin \$esp_usb_allowed {
++    default 0;
++    "" 1;
++    "https://${ip}" 1;
++}
++server {
++    listen 443 ssl;
++    server_name ${ip};
++    ssl_certificate /etc/letsencrypt/live/esp32-${ip}/fullchain.pem;
++    ssl_certificate_key /etc/letsencrypt/live/esp32-${ip}/privkey.pem;
++    if (\$host != "${ip}") { return 403; }
++    if (\$esp_usb_allowed = 0) { return 403; }
++    proxy_http_version 1.1;
++    proxy_set_header Host 127.0.0.1:8000;
++    proxy_set_header Origin http://127.0.0.1:8000;
++    proxy_set_header Upgrade \$http_upgrade;
++    proxy_set_header Connection \$esp_usb_upgrade;
++    proxy_read_timeout 3600s;
++    location = /ESP32/DetectorDispositivos { proxy_pass http://127.0.0.1:18000/; }
++    location = /ESP32/DetectorDispositivos/ { return 308 /ESP32/DetectorDispositivos; }
++    location /assets/ { proxy_pass http://127.0.0.1:18000; }
++    location /api/ { proxy_pass http://127.0.0.1:18000; }
++    location = /ws { proxy_pass http://127.0.0.1:18000; }
++    location = /api/browser-usb {
++        proxy_set_header Host 127.0.0.1:8000;
++        proxy_set_header Origin \$http_origin;
++        proxy_set_header Upgrade \$http_upgrade;
++        proxy_set_header Connection \$esp_usb_upgrade;
++        proxy_pass http://127.0.0.1:18000;
++    }
++    location / { return 404; }
++}
++NGINX
++apply_site "$tmp/site"
++install -d "$(dirname "$hook")" /etc/systemd/system/esp32-panel.service.d
++printf '#!/bin/sh\nnginx -t && systemctl reload nginx\n' > "$hook"
++chmod 755 "$hook"
++printf '[Service]\nEnvironment=DETECTOR_USB_ORIGIN=https://%s\n' "$ip" > /etc/systemd/system/esp32-panel.service.d/browser-usb.conf
++systemctl daemon-reload
++systemctl enable esp32-panel.service
++systemctl restart esp32-panel.service
++curl --retry 8 --retry-all-errors --retry-delay 1 -fsS --resolve "${ip}:443:127.0.0.1" "https://${ip}/ESP32/DetectorDispositivos" -o "$tmp/page"
++grep -q 'id="usbConnect"' "$tmp/page"
++echo "Panel preparado: https://${ip}/ESP32/DetectorDispositivos"
+FIN_CAMBIO_USB
+printf '%s  %s\n' '2e3358dfa16ed6d13d3d32a0de6ec628ac9f6a653e49b871f0e10a4006472558' "$usb_patch" | sha256sum --check --status
+if patch --dry-run --batch --forward --fuzz=0 -p1 < "$usb_patch" >/dev/null; then
+    patch --batch --forward --fuzz=0 -p1 < "$usb_patch"
+elif patch --dry-run --batch --force --reverse --fuzz=0 -p1 < "$usb_patch" >/dev/null; then
+    echo 'El cambio USB ya está aplicado.'
+else
+    echo 'Los archivos de EC2 difieren de la versión del ZIP. Se detuvo la actualización.'
+    exit 1
+fi
+echo 'Código listo. Ejecuta ahora el instalador HTTPS.'
+)

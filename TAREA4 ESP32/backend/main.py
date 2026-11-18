@@ -26,6 +26,42 @@ class Runtime(RuntimeState):
 
 runtime=None
 
+def browser_origin():
+    return os.environ.get("DETECTOR_USB_ORIGIN", "")
+
+async def ingest_serial(rt, framer, raw):
+    before=framer.dropped
+    records=framer.feed(raw)
+    rt.invalid+=framer.dropped-before
+    if framer.dropped>before:rt.error('Línea serial excesiva descartada.','protocol')
+    for buffer in records:
+        try:
+            event=parse_line(buffer)
+            rt.last_event=time.time()
+            if hasattr(event,'mac'):
+                rt.last_detection=time.time();rt.received_observations+=1;change=None
+                if rt.store:
+                    try:change=await asyncio.to_thread(rt.store.ingest,event,time.time())
+                    except sqlite3.Error as error:
+                        rt.storage_dropped+=1;rt.db_error=str(error);rt.error('No se pudo guardar una observación.','sqlite')
+                else:rt.storage_dropped+=1
+                if change and (change['new'] or change['returned']): rt.new_events=(rt.new_events+[dict(**change,time=time.time())])[-20:]
+            elif event['event'] in ('status','heartbeat'):
+                was_ready=rt.status.get('boot_id') != event.get('boot_id')
+                if rt.last_status and was_ready:
+                    rt.firmware_restarts+=1;rt.error('Nuevo arranque ESP32: '+str(event.get('reset_reason','motivo no informado')),'firmware')
+                rt.status=event;rt.last_status=time.time()
+                if was_ready or rt.applied is None and rt.pending is None:
+                    queue_config(rt)
+            elif event['event']=='ack':
+                if event.get('id')==rt.pending:
+                    rt.applied=event; rt.pending=None
+            elif event['event']=='error': rt.error(event.get('message','Error firmware'))
+        except (ValueError,UnicodeError) as e:
+            rt.invalid+=1
+            if 'protocolo' in str(e):rt.protocol_errors+=1
+            if buffer.lstrip().startswith(b'{'): rt.error('Evento serial inválido: '+str(e)[:160],'protocol')
+
 async def serial_loop(rt):
     import serial
     while True:
@@ -43,37 +79,7 @@ async def serial_loop(rt):
                     await asyncio.to_thread(port.write,(json.dumps(command)+'\n').encode())
                 raw=await asyncio.to_thread(port.read_until,b'\n',512)
                 if not raw: continue
-                before=framer.dropped
-                records=framer.feed(raw)
-                rt.invalid+=framer.dropped-before
-                if framer.dropped>before:rt.error('Línea serial excesiva descartada.','protocol')
-                for buffer in records:
-                    try:
-                        event=parse_line(buffer)
-                        rt.last_event=time.time()
-                        if hasattr(event,'mac'):
-                            rt.last_detection=time.time();rt.received_observations+=1;change=None
-                            if rt.store:
-                                try:change=await asyncio.to_thread(rt.store.ingest,event,time.time())
-                                except sqlite3.Error as error:
-                                    rt.storage_dropped+=1;rt.db_error=str(error);rt.error('No se pudo guardar una observación.','sqlite')
-                            else:rt.storage_dropped+=1
-                            if change and (change['new'] or change['returned']): rt.new_events=(rt.new_events+[dict(**change,time=time.time())])[-20:]
-                        elif event['event'] in ('status','heartbeat'):
-                            was_ready=rt.status.get('boot_id') != event.get('boot_id')
-                            if rt.last_status and was_ready:
-                                rt.firmware_restarts+=1;rt.error('Nuevo arranque ESP32: '+str(event.get('reset_reason','motivo no informado')),'firmware')
-                            rt.status=event;rt.last_status=time.time()
-                            if was_ready or rt.applied is None and rt.pending is None:
-                                queue_config(rt)
-                        elif event['event']=='ack':
-                            if event.get('id')==rt.pending:
-                                rt.applied=event; rt.pending=None
-                        elif event['event']=='error': rt.error(event.get('message','Error firmware'))
-                    except (ValueError,UnicodeError) as e:
-                        rt.invalid+=1
-                        if 'protocolo' in str(e):rt.protocol_errors+=1
-                        if buffer.lstrip().startswith(b'{'): rt.error('Evento serial inválido: '+str(e)[:160],'protocol')
+                await ingest_serial(rt, framer, raw)
         except asyncio.CancelledError: raise
         except (serial.SerialException,OSError) as e:
             msg='Puerto serial no disponible (inexistente, ocupado o desconectado): '+str(e)
@@ -119,7 +125,11 @@ async def lan_loop(rt):
 async def lifespan(app):
     global runtime
     runtime=Runtime()
-    tasks=[asyncio.create_task(serial_loop(runtime)),asyncio.create_task(housekeeping(runtime)),asyncio.create_task(lan_loop(runtime))]
+    tasks=[asyncio.create_task(housekeeping(runtime)),asyncio.create_task(lan_loop(runtime))]
+    if browser_origin():
+        runtime.serial_task_state = "waiting_browser"
+    else:
+        tasks.append(asyncio.create_task(serial_loop(runtime)))
     try: yield
     finally:
         for task in tasks: task.cancel()
@@ -226,6 +236,47 @@ def export(kind:str):
         writer.writerow(safe)
     return Response('\ufeff'+output.getvalue(),media_type='text/csv',headers={'Content-Disposition':'attachment; filename=dispositivos.csv'})
 
+@app.websocket('/api/browser-usb')
+async def browser_usb(ws: WebSocket):
+    rt = runtime
+    origin = browser_origin()
+    if not origin or ws.headers.get("origin") != origin or rt.connected:
+        await ws.close(code=1008)
+        return
+    # Claim before the first await so two tabs cannot interleave USB data.
+    rt.connected = True
+    rt.status = {}
+    rt.applied = rt.pending = None
+    rt.last_status = 0
+    rt.serial_task_state = "browser_usb"
+    rt.reconnects += 1
+    while not rt.commands.empty():
+        rt.commands.get_nowait()
+    framer = SerialFramer()
+    try:
+        await ws.accept()
+        await ws.send_json({"ready": True})
+        while True:
+            while not rt.commands.empty():
+                await ws.send_json({"command": rt.commands.get_nowait()})
+            try:
+                message = await asyncio.wait_for(ws.receive(), timeout=0.2)
+            except asyncio.TimeoutError:
+                continue
+            if message["type"] == "websocket.disconnect":
+                break
+            chunk = message.get("bytes")
+            if chunk is None or len(chunk) > 16384:
+                await ws.close(code=1003)
+                break
+            await ingest_serial(rt, framer, chunk)
+    except (WebSocketDisconnect, OSError):
+        pass
+    finally:
+        rt.connected = False
+        rt.pending = None
+        rt.serial_task_state = "waiting_browser"
+
 @app.websocket('/ws')
 async def websocket(ws:WebSocket):
     if ws.headers.get('origin') not in ('http://localhost:8000','http://127.0.0.1:8000'):
@@ -244,6 +295,11 @@ app.mount('/assets',StaticFiles(directory=ROOT/'frontend',check_dir=False),name=
 def index():
     path=ROOT/'frontend/index.html'
     if not path.exists():return HTMLResponse('<h1>Panel HTML no encontrado</h1><p>Conserva la carpeta frontend junto al backend.</p><a href="/api/diagnostics">Diagnóstico</a>',status_code=503)
+    if browser_origin():
+        page = path.read_text(encoding='utf-8')
+        control = '<button id="usbConnect" type="button">Conectar ESP32</button><span id="usbMessage" role="status"></span>'
+        page = page.replace('<time id="clock">', control + '<time id="clock">')
+        return HTMLResponse(page.replace('</head>', '<script src="/assets/web-serial.js" defer></script></head>'))
     return FileResponse(path)
 
 @app.post('/api/scanner/recover')

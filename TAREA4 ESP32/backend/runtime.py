@@ -50,7 +50,7 @@ class Runtime:
         active=any(x['active'] for x in scanners.values());database=bool(self.store and not self.db_error)
         return dict(service='esp32-detector',api_version='2.2.0',status='ok' if database else 'degraded',backend=dict(active=True,uptime_seconds=round(now-self.started,1)),
             database=dict(available=database,error=self.db_error or None,schema_version=2 if database else None),
-            serial=dict(connected=self.connected,port=self.settings.port,error=self.serial_error or None,worker=self.serial_task_state),
+            serial=dict(connected=self.connected,port='USB del navegador' if self.serial_task_state in ('browser_usb','waiting_browser') else self.settings.port,error=self.serial_error or None,worker=self.serial_task_state),
             firmware=dict(responding=responding,version=self.status.get('firmware'),protocol_version=self.status.get('v'),last_status=self.last_status or None,reset_count=self.firmware_restarts),
             scanners=scanners,scanner_active=active,message='ESP32 conectado — escáner activo' if active else 'ESP32 conectado — escaneo no confirmado (firmware v1)' if responding and self.status.get('v',1)==1 else 'ESP32 conectado — esperando turno de escaneo' if responding else 'Puerto serial abierto — firmware sin respuesta' if self.connected else 'ESP32 desconectado — esperando conexión serial',configuration_error=self.config_error or None)
     def diagnostics(self):
