@@ -1,4 +1,5 @@
 import argparse,requests,serial,time,math,sys
+from serial.tools import list_ports
 from urllib.parse import urlparse
 
 def number(x):
@@ -21,17 +22,44 @@ def parse(line):
     return dict(temperatura=t,humedad=h,clase_red=pred,clase_led=led,p_frio=prob[0],p_templado=prob[1],p_caliente=prob[2],latencia_us=lat,modo=mode)
 
 p=argparse.ArgumentParser()
-p.add_argument('--port',default='COM10');p.add_argument('--url',default='https://18.191.113.248/ESP32/experimento2/api/ingest')
+p.add_argument('--port',default='auto',help='auto o puerto especifico (COM5, COM10, etc)');p.add_argument('--url',default='https://18.191.113.248/ESP32/experimento2/api/ingest')
 p.add_argument('--token',default='');p.add_argument('--insecure',action='store_true',help='SOLO pruebas en una red de confianza; no valida TLS')
 a=p.parse_args();u=urlparse(a.url);headers={'Origin':f'{u.scheme}://{u.netloc}'}
 if a.token:headers['X-API-Key']=a.token
-print('USB:',a.port,'  Destino:',a.url,flush=True)
+def choose_port():
+    if a.port.lower() != 'auto':return a.port
+    ports=list(list_ports.comports())
+    if not ports:
+        print('No se encontraron puertos seriales. Conecta la ESP32-CAM.',flush=True)
+        return None
+    matches=[p for p in ports if p.vid in (0x1A86,0x10C4) or any(k in (p.description or '').lower() for k in ('ch340','ch341','cp210','usb-serial'))]
+    if len(matches)==1:
+        print('ESP32/USB detectado:',matches[0].device,matches[0].description,flush=True)
+        return matches[0].device
+    print('Puertos disponibles:',flush=True)
+    for i,port in enumerate(ports,1):print(f'  {i}. {port.device} — {port.description}',flush=True)
+    if not sys.stdin.isatty():
+        print('Seleccion automatica ambigua: usa --port COMx',flush=True)
+        return None
+    try:
+        resp=input('Selecciona numero (Enter para buscar nuevamente): ').strip()
+        if not resp:return None
+        index=int(resp)-1
+        return ports[index].device if 0<=index<len(ports) else None
+    except (EOFError,ValueError):return None
+
+print('Puerto: seleccion automatica' if a.port.lower()=='auto' else 'Puerto: '+a.port, '  Destino:',a.url,flush=True)
 if a.insecure:
  print('AVISO: --insecure omite la validacion HTTPS; usar solo para diagnostico.',flush=True)
 while True:
     try:
         ser=serial.Serial(port=None,baudrate=115200,timeout=3,rtscts=False,dsrdtr=False)
-        ser.dtr=False;ser.rts=False;ser.port=a.port;ser.open()
+        port=choose_port()
+        if port is None:
+            time.sleep(5)
+            continue
+        ser.dtr=False;ser.rts=False;ser.port=port;ser.open()
+        print('Puerto conectado:',port,flush=True)
         print('COM abierto; esperando CAL,TINYML o DHT22...',flush=True)
         try:
             while True:
