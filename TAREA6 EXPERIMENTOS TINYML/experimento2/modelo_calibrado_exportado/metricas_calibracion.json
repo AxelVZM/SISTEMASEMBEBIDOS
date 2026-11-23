@@ -1,8 +1,0 @@
-{
-  "origen": "REENTRENAMIENTO_CON_DATOS_SINTETICOS",
-  "real": 3000,
-  "sinteticos": 3900,
-  "accuracy_val_mixta": 0.5644983461962514,
-  "discrepancias_malla": 8,
-  "nota": "No es validacion independiente en nuevas sesiones reales"
-}

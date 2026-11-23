@@ -19,7 +19,7 @@ constexpr float LIMITE_CALIENTE = 21.0f;
 // En la primera validacion, el LED refleja la temperatura medida.
 // La prediccion TinyML se calcula siempre y se reporta por separado.
 // Cambiar a false SOLO cuando el modelo reentrenado supere las pruebas.
-constexpr bool MODO_CALIBRACION = true;
+constexpr bool MODO_CALIBRACION = false;
 
 void apagar() {
   digitalWrite(LED_AZUL, LOW);
@@ -45,8 +45,10 @@ void setup() {
   pinMode(LED_ROJO, OUTPUT);
   apagar();
   dht.begin();
+  Serial.println("BOOT,ESP32CAM_TINYML_VFINAL,115200");
+  Serial.flush();
   listo = modelInit(modelo_temperatura, tensorArena, ARENA_BYTES);
-  Serial.println("READY,CALIBRACION_DHT22,115200");
+  Serial.println("READY,TINYML_DHT22,115200");
   if (!listo) Serial.println("ERROR,MODELO_NO_INICIALIZADO");
   Serial.println("CSV,TEMP_C,HUM_PCT,CLASE_RED,CLASE_REFERENCIA,CLASE_LED,P_FRIO,P_TEMPLADO,P_CALIENTE,LATENCIA_US");
 }

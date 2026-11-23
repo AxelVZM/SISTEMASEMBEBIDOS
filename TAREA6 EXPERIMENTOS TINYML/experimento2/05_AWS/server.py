@@ -31,16 +31,7 @@ def state():
 def ingest():
     global latest,n
     auth=request.headers.get('X-API-Key','')
-    # Token opcional. Si no existe en el servicio, solo se permite la petición
-    # originada desde el mismo sitio. Esto NO reemplaza una autenticación real.
-    if TOKEN:
-        if not hmac.compare_digest(auth,TOKEN):return jsonify(error='no autorizado'),401
-    else:
-        origen=request.headers.get('Origin','')
-        esperado=f'{request.headers.get("X-Forwarded-Proto",request.scheme)}://{request.host}'
-        if not origen or origen != esperado:
-            return jsonify(error='origen no permitido'),403
-    if request.content_length and request.content_length > 4096:return jsonify(error='solicitud demasiado grande'),413
+    if TOKEN and not hmac.compare_digest(auth,TOKEN):return jsonify(error='no autorizado'),401
     data=request.get_json(silent=True)
     if not isinstance(data,dict):return jsonify(error='JSON invalido'),400
     try:
