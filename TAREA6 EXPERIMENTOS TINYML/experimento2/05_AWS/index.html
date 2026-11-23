@@ -1,12 +1,115 @@
 <!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Experimento 2 · TinyML | AWS</title><style>
-:root{color-scheme:dark}*{box-sizing:border-box}body{background:#0b1220;color:#edf5ff;font:15px system-ui,Arial;margin:0}main{max-width:1150px;margin:auto;padding:24px}h1{font-size:clamp(24px,4vw,36px);margin:10px 0}h2{font-size:17px}p,small{color:#adc0d5}a{color:#91c6ff}.head{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}.chip{padding:7px 12px;border-radius:40px;background:#25384d}.grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}.card{border:1px solid #33475d;border-radius:14px;padding:18px;background:#172538;margin:12px 0}.value{font-size:30px;font-weight:750;margin:8px 0}.two{display:grid;grid-template-columns:1fr 1fr;gap:12px}.bar{background:#35475c;border-radius:12px;height:12px;overflow:hidden}.fill{height:100%;width:0;transition:width .5s}.line{display:flex;justify-content:space-between;margin:12px 0 5px}.lights{display:flex;gap:25px;padding:14px}.light{width:30px;height:30px;border-radius:50%;opacity:.2}.light.on{opacity:1;box-shadow:0 0 18px currentColor}canvas{width:100%;height:190px}table{width:100%;border-collapse:collapse;font-size:13px}th,td{border-bottom:1px solid #34465a;padding:9px;text-align:left}th{color:#b7c7da}.scroll{overflow:auto}@media(max-width:850px){.grid{grid-template-columns:repeat(2,1fr)}}@media(max-width:600px){.grid,.two{grid-template-columns:1fr}}
-</style></head><body><main><div class="head"><div><small>ESP32-CAM · DHT22 · TinyML · AWS EC2</small><h1>Experimento 2 · Temperatura inteligente</h1><p>Predicciones TinyML enviadas automáticamente desde Windows a AWS</p></div><span class="chip" id="connection">Esperando datos</span></div>
-<div class="card"><b>Conexión automática:</b> Ejecuta <code>06_PUENTE_WINDOWS\iniciar_puente.cmd</code> en la PC conectada por USB. No hay puerto COM fijo: se detecta CH340/CP210x. El navegador no abre ni bloquea el puerto serie.</div><div class="grid"><div class="card"><small>Temperatura</small><div class="value" id="temp">—</div></div><div class="card"><small>Humedad</small><div class="value" id="hum">—</div></div><div class="card"><small>Predicción TinyML</small><div class="value" id="pred">—</div></div><div class="card"><small>Referencia 12/21 °C</small><div class="value" id="ref">—</div></div></div>
+:root{color-scheme:dark}*{box-sizing:border-box}body{background:#0b1220;color:#edf5ff;font:15px system-ui,Arial;margin:0}main{max-width:1150px;margin:auto;padding:24px}h1{font-size:clamp(24px,4vw,36px);margin:10px 0}h2{font-size:17px}p,small{color:#adc0d5}a{color:#91c6ff}.head{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}.chip{padding:7px 12px;border-radius:40px;background:#25384d}.grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}.card{border:1px solid #33475d;border-radius:14px;padding:18px;background:#172538;margin:12px 0}.value{font-size:30px;font-weight:750;margin:8px 0}.two{display:grid;grid-template-columns:1fr 1fr;gap:12px}.bar{background:#35475c;border-radius:12px;height:12px;overflow:hidden}.fill{height:100%;width:0;transition:width .5s}.line{display:flex;justify-content:space-between;margin:12px 0 5px}.lights{display:flex;gap:25px;padding:14px}.light{width:30px;height:30px;border-radius:50%;opacity:.2}.light.on{opacity:1;box-shadow:0 0 18px currentColor}canvas{width:100%;height:190px}table{width:100%;border-collapse:collapse;font-size:13px}th,td{border-bottom:1px solid #34465a;padding:9px;text-align:left}th{color:#b7c7da}.scroll{overflow:auto}button{padding:11px 16px;background:#2e8fe8;color:white;border:0;border-radius:9px;cursor:pointer;font-weight:650}button:disabled{opacity:.45;cursor:not-allowed}#btnDisconnect{background:#485a70}#serialError{white-space:pre-wrap}details{color:#adc0d5;margin-top:10px}code{word-break:break-all}@media(max-width:850px){.grid{grid-template-columns:repeat(2,1fr)}}@media(max-width:600px){.grid,.two{grid-template-columns:1fr}}
+</style></head><body><main><div class="head"><div><small>ESP32-CAM · DHT22 · TinyML · AWS EC2</small><h1>Experimento 2 · Temperatura inteligente</h1><p>Conexión directa desde Chrome o Edge al USB de esta computadora y registro en AWS</p></div><span class="chip" id="connection">Esperando datos</span></div>
+<div class="card" id="serialBox"><div class="head"><div><h2>Conectar ESP32-CAM por USB</h2><p>Abre este panel en Chrome o Edge desde la PC donde está conectada la ESP32-CAM. Cierra antes el Monitor Serie de Arduino.</p></div><span class="chip" id="serialStatus">USB desconectado</span></div><div class="head"><div><button id="btnConnect" type="button">Conectar ESP32-CAM (COM)</button> <button id="btnDisconnect" type="button" disabled>Desconectar</button></div><small id="usbInfo">115200 baudios · Sin Wi-Fi · Registro en AWS</small></div><p id="serialError" role="status"></p><div style="font-size:13px;color:#b9d4ed;margin-top:8px">Diagnóstico: <strong id="serialPhase">Listo para seleccionar el puerto</strong> · Bytes: <strong id="byteCount">0</strong> · Líneas: <strong id="lineCount">0</strong> · Válidas: <strong id="validCount">0</strong></div><p style="font-size:13px">El navegador solicita directamente el puerto USB conectado a esta computadora. Selecciona USB-SERIAL CH340 o el adaptador correspondiente, sin importar el número COM asignado por Windows. No se utiliza ningún puente local.</p><details><summary>Última línea recibida</summary><code id="rawSerial">Sin datos</code></details></div>
+<div class="grid"><div class="card"><small>Temperatura</small><div class="value" id="temp">—</div></div><div class="card"><small>Humedad</small><div class="value" id="hum">—</div></div><div class="card"><small>Predicción TinyML</small><div class="value" id="pred">—</div></div><div class="card"><small>Referencia 12/21 °C</small><div class="value" id="ref">—</div></div></div>
 <div class="two"><div class="card"><h2>Probabilidades de la red</h2><div id="bars"></div><small id="mode">Esperando inferencia</small></div><div class="card"><h2>LED físico reportado</h2><div class="lights"><div id="l0" class="light" style="background:#4aa1ff;color:#4aa1ff"></div><div id="l1" class="light" style="background:#35cb87;color:#35cb87"></div><div id="l2" class="light" style="background:#f36c65;color:#f36c65"></div></div><div class="value" id="led">—</div><p>El color representa la orden recibida, no una verificación óptica del LED.</p></div></div>
 <div class="two"><div class="card"><h2>Temperatura reciente (°C)</h2><canvas id="chartT"></canvas></div><div class="card"><h2>Humedad reciente (%)</h2><canvas id="chartH"></canvas></div></div><div class="card"><div class="head"><h2>Historial de mediciones</h2><a href="dataset">Descargar CSV AWS</a></div><p id="total">0 registros</p><div class="scroll"><table><thead><tr><th>Hora UTC</th><th>°C</th><th>%</th><th>Predicción</th><th>Referencia</th><th>LED</th><th>Latencia</th></tr></thead><tbody id="history"></tbody></table></div></div><p><a href="/ESP32">Volver al menú ESP32</a> · El cálculo TinyML ocurre en el microcontrolador, no en AWS.</p></main>
 <script>
 const $=id=>document.getElementById(id);const names=['FRIO','TEMPLADO','CALIENTE'];const colors=['#4aa1ff','#35cb87','#f36c65'];const fmt=v=>v===null||v===undefined||v===''?'—':Number(v).toFixed(1);const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 function plot(id,arr,key){const canvas=$(id);let w=canvas.clientWidth||400,h=190;canvas.width=w*devicePixelRatio;canvas.height=h*devicePixelRatio;let c=canvas.getContext('2d');c.setTransform(devicePixelRatio,0,0,devicePixelRatio,0,0);c.clearRect(0,0,w,h);const v=arr.map(r=>Number(r[key])).filter(Number.isFinite);if(v.length<2)return;let lo=Math.min(...v),hi=Math.max(...v);if(hi===lo){hi++;lo--;}c.strokeStyle='#4aa1ff';c.lineWidth=2;c.beginPath();v.forEach((x,i)=>{const px=8+(w-16)*i/(v.length-1),py=h-12-(h-24)*(x-lo)/(hi-lo);if(i)c.lineTo(px,py);else c.moveTo(px,py)});c.stroke();c.fillStyle='#b1c1d4';c.font='12px system-ui';c.fillText(hi.toFixed(1),8,13);c.fillText(lo.toFixed(1),8,h-4)}
 async function refresh(){try{let r=await fetch('api/state',{cache:'no-store'});if(!r.ok)throw Error('HTTP '+r.status);let s=await r.json();$('total').textContent=s.records+' registros guardados';if(!s.latest){$('connection').textContent='Sin mediciones todavía';return}let q=s.latest,stamp=Date.parse(q.fecha),stale=!Number.isFinite(stamp)||Date.now()-stamp>15000;$('connection').textContent=stale?'Sin datos recientes':'Recibiendo datos';$('temp').textContent=fmt(q.temperatura)+' °C';$('hum').textContent=fmt(q.humedad)+' %';$('pred').textContent=q.clase_red;$('ref').textContent=q.clase_referencia;$('led').textContent=q.clase_led;$('mode').textContent='Modo firmware: '+q.modo+' · latencia: '+fmt(q.latencia_us)+' μs';$('bars').innerHTML=names.map((name,i)=>{let v=q[['p_frio','p_templado','p_caliente'][i]];let p=v===null||v===''?0:Math.max(0,Math.min(100,Number(v)*100));return `<div class="line"><span>${name}</span><span>${v===null||v===''?'—':p.toFixed(1)+'%'}</span></div><div class="bar"><div class="fill" style="background:${colors[i]};width:${p}%"></div></div>`}).join('');names.forEach((x,i)=>$('l'+i).classList.toggle('on',q.clase_led===x));$('history').innerHTML=s.history.slice(-25).reverse().map(x=>`<tr><td>${esc(x.fecha?.slice(11,19))}</td><td>${fmt(x.temperatura)}</td><td>${fmt(x.humedad)}</td><td>${esc(x.clase_red)}</td><td>${esc(x.clase_referencia)}</td><td>${esc(x.clase_led)}</td><td>${fmt(x.latencia_us)} μs</td></tr>`).join('');plot('chartT',s.history,'temperatura');plot('chartH',s.history,'humedad')}catch(e){$('connection').textContent='Error de conexión al servidor'}}
-refresh();setInterval(refresh,2500)
+// Web Serial: solo navegador local. ESP32-CAM-MB CH340 requiere liberar DTR/RTS
+// para no mantener la CPU en reset. No se fija ningun numero COM.
+let usbPort=null, usbReader=null, usbActive=false, usbOpening=false, usbBuffer='', loopTask=null;
+let received=0, lines=0, valid=0, sent=0;
+let sendQueue=[], sending=false, firstByteWatch=null;
+const decoder = new TextDecoder('utf-8');
+const phase=s=>{$('serialPhase').textContent=s;};
+function status(s){$('serialStatus').textContent=s;}
+function err(s){$('serialError').textContent=s||'';}
+function counters(){ $('byteCount').textContent=received; $('lineCount').textContent=lines; $('validCount').textContent=valid; }
+function infoPort(p){if(!p)return 'Puerto no seleccionado';const i=p.getInfo?.()||{};return i.usbVendorId===undefined?'Puerto USB autorizado':'USB VID '+i.usbVendorId.toString(16).toUpperCase().padStart(4,'0')+' PID '+(i.usbProductId||0).toString(16).toUpperCase().padStart(4,'0');}
+function safeNumber(v){if(v==null||String(v).trim()===''||String(v).toLowerCase()==='nan')return null;let x=Number(v);return Number.isFinite(x)?x:null;}
+function refClass(t){return t<12?'FRIO':t<21?'TEMPLADO':'CALIENTE';}
+function parseUsb(line){
+ const a=line.trim().split(',').map(s=>s.trim());let d;
+ if(a[0]==='CAL' && a.length>=10){d={temperatura:safeNumber(a[1]),humedad:safeNumber(a[2]),clase_red:a[3],clase_led:a[5],p_frio:safeNumber(a[6]),p_templado:safeNumber(a[7]),p_caliente:safeNumber(a[8]),latencia_us:safeNumber(a[9]),modo:a[3]==='SIN_MODELO'?'DIAGNOSTICO':'TINYML'};}
+ else if(a[0]==='TINYML'&&a.length>=8){d={temperatura:safeNumber(a[1]),humedad:safeNumber(a[2]),clase_red:a[3],clase_led:a[3],p_frio:safeNumber(a[4]),p_templado:safeNumber(a[5]),p_caliente:safeNumber(a[6]),latencia_us:safeNumber(a[7]),modo:'TINYML'};}
+ else if(a[0]==='DHT22'&&a.length>=3){d={temperatura:safeNumber(a[1]),humedad:safeNumber(a[2]),clase_red:'SIN_MODELO',clase_led:'DESCONOCIDO',p_frio:null,p_templado:null,p_caliente:null,latencia_us:0,modo:'DIAGNOSTICO'};}
+ else {
+ // Compatibilidad con el primer firmware que imprimia las lecturas en espanol.
+ const m=line.match(/Temperatura:\s*(-?[\d.]+).*?Humedad:\s*([\d.]+)/i);
+ if(!m)return null;
+ d={temperatura:safeNumber(m[1]),humedad:safeNumber(m[2]),clase_red:'SIN_MODELO',clase_led:'DESCONOCIDO',p_frio:null,p_templado:null,p_caliente:null,latencia_us:0,modo:'DIAGNOSTICO'};
+ }
+ if(d.temperatura===null||d.humedad===null||d.temperatura < -40||d.temperatura>80||d.humedad<0||d.humedad>100)return null;
+ if(!['FRIO','TEMPLADO','CALIENTE','SIN_MODELO'].includes(d.clase_red))return null;
+ if(!['FRIO','TEMPLADO','CALIENTE','DESCONOCIDO'].includes(d.clase_led))return null;
+ return d;
+}
+async function postData(d){
+ const c=new AbortController(),timeout=setTimeout(()=>c.abort(),6500);
+ try {
+  const r=await fetch('api/ingest',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(d),signal:c.signal});
+  if(!r.ok)throw Error('AWS HTTP '+r.status+' '+(await r.text()).slice(0,120));
+  sent++;status('USB conectado · '+sent+' guardadas en AWS');err('');phase('Mediciones recibidas y guardadas en AWS');void refresh();
+ }catch(e){phase('USB recibiendo datos, error al enviar AWS');err('Recepcion USB correcta. Error al guardar: '+(e.message||e));}
+ finally{clearTimeout(timeout);}
+}
+async function sendPending(){
+ if(sending)return;sending=true;
+ try{while(usbActive&&sendQueue.length){await postData(sendQueue.shift());}}
+ finally{sending=false;}
+}
+function receivedLine(line){
+ if(!line.trim())return;lines++;$('rawSerial').textContent=line.slice(0,400);
+ const d=parseUsb(line);counters();
+ if(!d){if(line.startsWith('ERROR'))err('Firmware: '+line);return;}
+ valid++;counters();phase('Recibiendo mediciones validas');
+ sendQueue.push(d);if(sendQueue.length>15)sendQueue.shift();void sendPending();
+}
+function processChunk(data){
+ received+=data.byteLength;counters();
+ usbBuffer+=decoder.decode(data,{stream:true});
+ if(usbBuffer.length>16000)usbBuffer=usbBuffer.slice(-8000);
+ const parts=usbBuffer.split(/\r\n|\n|\r/);usbBuffer=parts.pop();
+ parts.forEach(receivedLine);
+}
+async function readLoop(port){
+ try {
+  while(usbActive && port.readable){
+   usbReader=port.readable.getReader();
+   try{while(usbActive){const {value,done}=await usbReader.read();if(done)break;if(value)processChunk(value);}}
+   finally{try{usbReader.releaseLock();}catch(_){}usbReader=null;}
+  }
+ }catch(e){if(usbActive)err('Error USB al leer: '+(e.message||e));}
+ finally{usbActive=false;clearTimeout(firstByteWatch);$('btnConnect').disabled=false;$('btnDisconnect').disabled=true;phase('USB desconectado');status('USB desconectado');try{await port.close();}catch(_){}if(usbPort===port)usbPort=null;}
+}
+async function releaseResetSignals(port){
+ // CH340/ESP32-CAM-MB pueden tener RTS activo y mantener EN en bajo.
+ // setSignals(false) libera DTR y RTS. Un error no impide leer.
+ try {await port.setSignals({dataTerminalReady:false,requestToSend:false});phase('Puerto abierto; DTR y RTS desactivados');}
+ catch(e){phase('Puerto abierto; no se pudo controlar DTR/RTS: '+(e.message||e));}
+}
+$('btnConnect').onclick=async()=>{
+ if(usbOpening||usbActive)return;
+ if(!window.isSecureContext){err('El navegador no considera confiable el HTTPS de esta IP. Web Serial requiere un origen seguro.');return;}
+ if(!navigator.serial){err('Usa Chrome o Edge de escritorio con acceso Web Serial.');return;}
+ usbOpening=true;$('btnConnect').disabled=true;err('');phase('Selecciona el adaptador USB de tu ESP32-CAM (el numero COM puede cambiar)');status('Seleccionando puerto');
+ let port=null;
+ try{
+  port=await navigator.serial.requestPort();
+  // El navegador abre el dispositivo elegido por el usuario, no COM10.
+  phase('Abriendo puerto USB a 115200 baudios');status('Abriendo puerto');
+  await port.open({baudRate:115200,flowControl:'none',bufferSize:4096});
+  await releaseResetSignals(port);
+  usbPort=port;usbActive=true;usbOpening=false;usbBuffer='';received=lines=valid=sent=0;sendQueue=[];counters();
+  $('rawSerial').textContent='Esperando primera linea...';
+  $('btnDisconnect').disabled=false;status('USB abierto · '+infoPort(port));
+  phase('Escuchando datos a 115200 baudios');
+  loopTask=readLoop(port);
+  firstByteWatch=setTimeout(()=>{
+   if(usbActive&&received===0){phase('Puerto abierto pero firmware no envia datos');err('USB abierto, 0 bytes. El navegador libero DTR/RTS. Si sigue sin bytes, la placa no esta transmitiendo por este puerto o esta reiniciandose.');}
+   else if(usbActive&&valid===0){phase('Hay bytes pero el formato no corresponde al firmware');err('Se reciben bytes, pero no lecturas validas. Consulta «Ultima linea recibida».');}
+  },10000);
+ }catch(e){usbOpening=false;status('USB desconectado');phase('No se pudo abrir USB');$('btnConnect').disabled=false;err(e.name==='NotFoundError'?'Seleccion de puerto cancelada.':e.name==='NetworkError'?'No se puede abrir el puerto: posiblemente lo usa Arduino u otra pestaña.':(e.message||String(e)));try{await port?.close();}catch(_){} }
+};
+$('btnDisconnect').onclick=async()=>{
+ usbActive=false;clearTimeout(firstByteWatch);phase('Cerrando USB');$('btnDisconnect').disabled=true;
+ try{await usbReader?.cancel();}catch(_){}
+};
+if(!window.isSecureContext)err('Este HTTPS no es considerado seguro por el navegador; la conexion USB directa requiere un certificado confiable.');
+
+refresh();setInterval(refresh,2500);
 </script></body></html>
