@@ -1,0 +1,6 @@
+__pycache__/
+*.pyc
+.venv*/
+*.env
+mediciones_ec2.csv
+resultados_tinyml.csv
