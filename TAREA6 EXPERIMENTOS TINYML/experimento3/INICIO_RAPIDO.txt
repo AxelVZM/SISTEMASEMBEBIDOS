@@ -1,0 +1,13 @@
+CORRECCION DEL ERROR: SESGOS_1 / PESOS_1 no declarado
+
+1) Cierra Arduino IDE.
+2) Abre la carpeta de este ZIP: Arduino\02_TinyML_Sensores_LEDs\
+3) Copia AMBOS archivos a tu carpeta del proyecto:
+   02_TinyML_Sensores_LEDs.ino y model.h
+   Reemplaza los anteriores. NO utilices el model.h de las versiones viejas.
+4) Reabre el .ino, elige AI Thinker ESP32-CAM, verifica y sube.
+5) Los sensores y LEDs NO se reconectan. Para usar HTML, cierra Monitor Serie y
+   ejecuta Panel_HTML\abrir_local.cmd y pulsa Conectar en Chrome/Edge.
+
+NOTA: este modelo de ejemplo se entreno con datos sinteticos, no datos medidos.
+No se necesita instalar tflm_esp32 ni EloquentTinyML.

@@ -1,0 +1,312 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Experimento 3 · ESP32-CAM · TinyML · UNSAAC</title>
+<link rel="icon" type="image/png" href="./assets/escudo.png">
+<style>
+:root{color-scheme:dark;--bg:#090e1a;--panel:#111b2d;--panel2:#16233a;--edge:#25334d;--txt:#f2f6fe;--mut:#9aacc7;--blue:#60c3ff;--green:#61e3ad;--orange:#ffbd69;--red:#fb7377}
+*{box-sizing:border-box}body{margin:0;background:radial-gradient(circle at 30% -5%,#132546 0%,transparent 45%),var(--bg);color:var(--txt);font-family:system-ui,-apple-system,Segoe UI,Arial,sans-serif;line-height:1.45}main{width:min(1180px,calc(100% - 36px));margin:28px auto 50px}h1{font-size:clamp(1.5rem,2.4vw,2.3rem);letter-spacing:-.035em;margin:4px 0 6px}.kicker{font-weight:750;text-transform:uppercase;font-size:.76rem;letter-spacing:.16em;color:var(--blue)}.sub{color:var(--mut);margin:0 0 20px}.head{display:flex;align-items:start;justify-content:space-between;gap:16px;flex-wrap:wrap}.status{display:flex;align-items:center;gap:10px;background:#172237;border:1px solid var(--edge);padding:10px 13px;border-radius:999px;color:var(--mut);font-size:.88rem;font-weight:650}.dot{width:9px;height:9px;background:var(--red);border-radius:50%;box-shadow:0 0 10px #fb737755}.dot.ok{background:var(--green);box-shadow:0 0 10px #61e3ad77}.notice{display:none;border:1px solid #805745;background:#49301d;color:#ffdcab;border-radius:13px;padding:11px 14px;margin-bottom:16px}.notice.visible{display:block}.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}.panel{background:linear-gradient(160deg,var(--panel),#101729);border:1px solid var(--edge);border-radius:18px;padding:22px;min-width:0}.meta{color:var(--mut);font-size:.84rem;letter-spacing:.025em;font-weight:600}.sensor-top{display:flex;gap:16px;align-items:center;justify-content:space-between}.sensor-name{font-weight:800;font-size:1.2rem;margin:6px 0 8px}.big{font-size:clamp(2.8rem,5vw,4.5rem);font-weight:780;letter-spacing:-.075em;line-height:1.1;font-variant-numeric:tabular-nums}.unit{font-size:1rem;font-weight:650;letter-spacing:0;color:var(--mut);padding-left:8px}.indicator{display:inline-flex;align-items:center;border-radius:100px;padding:6px 11px;background:#16392d;color:var(--green);font-weight:700;font-size:.8rem;white-space:nowrap}.indicator.alert{background:#48272c;color:#ff9a9e}.bar{height:12px;background:#29344a;border-radius:12px;overflow:hidden;margin:23px 0 9px}.fill{width:0%;height:100%;border-radius:12px;background:linear-gradient(90deg,#4a9dff,#73d5ff);transition:width .25s ease}.fill.alert{background:linear-gradient(90deg,#ff7c69,#ffb771)}.flex{display:flex;gap:14px;align-items:center;justify-content:space-between}.small{font-size:.82rem;color:var(--mut)}.decision{display:flex;gap:14px;justify-content:space-between;align-items:center;flex-wrap:wrap}.decision-title{font-weight:850;font-size:clamp(2rem,3vw,3rem);letter-spacing:-.035em;margin:6px 0}.decision-title.stop{color:var(--red)}.decision-title.go{color:var(--green)}.mode{font-size:.8rem;color:#b2caff;background:#203654;padding:7px 10px;border-radius:9px;font-weight:700}.statnum{font-weight:800;font-size:1.65rem;font-variant-numeric:tabular-nums}.three{display:grid;grid-template-columns:repeat(3,1fr);gap:13px;margin-top:14px}.stat{background:#151f32;border:1px solid var(--edge);padding:15px;border-radius:14px}.stat .meta{display:block;margin-bottom:5px}h2{font-size:1.16rem;letter-spacing:-.02em;margin:0 0 16px}.chart-panel{margin-top:16px}.chart-wrap{height:285px;width:100%}canvas{width:100%;height:100%;display:block}.legend{display:flex;gap:17px;flex-wrap:wrap;margin-top:5px}.swatch{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:6px}.table-wrap{overflow-x:auto}table{width:100%;border-collapse:collapse;font-size:.88rem;min-width:630px}th{text-align:left;color:var(--mut);font-size:.76rem;letter-spacing:.04em;padding:11px;border-bottom:1px solid var(--edge)}td{padding:10px 11px;border-bottom:1px solid #202f47;font-variant-numeric:tabular-nums}.tag{padding:3px 9px;border-radius:7px;display:inline-block;background:#27344e;font-size:.78rem;font-weight:700}.tag.stop{background:#4b282b;color:#ffb1b3}.tag.go{background:#174238;color:#a2f6cd}.rowbuttons{display:flex;gap:10px;align-items:center;justify-content:space-between;flex-wrap:wrap}.btn{display:inline-flex;align-items:center;gap:8px;background:#253e60;color:#fff;border:1px solid #426187;border-radius:10px;padding:9px 13px;font-weight:700;text-decoration:none;font-size:.85rem}.btn:hover{background:#2d4e7d}.foot{color:var(--mut);font-size:.78rem;margin:20px 2px 0}.foot strong{color:var(--txt)}@media(max-width:760px){.grid{grid-template-columns:1fr}.three{grid-template-columns:1fr 1fr}.panel{padding:18px}.chart-wrap{height:220px}main{width:calc(100% - 22px);margin-top:18px}}
+
+/* Escudo institucional: pequeño, separado del estado de conexión */
+.header-right{display:flex;align-items:center;gap:14px;flex-shrink:0}
+.uni-logo{display:block;width:55px;height:72px;object-fit:contain;filter:drop-shadow(0 1px 6px rgba(255,255,255,.16))}
+@media(max-width:760px){.header-right{width:100%;justify-content:space-between}.uni-logo{width:43px;height:58px}}
+button.btn{cursor:pointer}button:disabled{cursor:not-allowed;opacity:.5}button.btn:focus-visible{outline:2px solid #fff;outline-offset:2px}</style>
+</head>
+<body><main>
+<header class="head"><div><div class="kicker">Sistemas embebidos / experimento 03</div><h1>Detección inteligente de obstáculos</h1><p class="sub">ESP32-CAM · Sensores HC-SR04 · Indicadores LED · Monitor USB directo · sin puente</p></div><div class="header-right"><div class="status"><span class="dot" id="statusDot"></span><span id="statusText">Esperando conexión...</span></div><img class="uni-logo" src="./assets/escudo.png" width="55" height="72" alt="Escudo institucional" title="Escudo institucional"></div></header>
+<div id="notice" class="notice"></div>
+<section class="panel" style="margin-bottom:16px;display:flex;gap:12px;align-items:center;flex-wrap:wrap">
+  <button class="btn" id="conectar" type="button">Conectar ESP32-CAM (elegir COM)</button>
+  <button class="btn" id="reconectar" type="button">Reconectar último USB</button>
+  <button class="btn" id="desconectar" type="button" disabled>Desconectar</button>
+  <button class="btn" id="limpiar" type="button">Limpiar historial</button>
+  <span class="small" id="mensajePuerto">Chrome/Edge · 115200 baudios · cierra el Monitor Serie de Arduino</span>
+</section>
+<section class="grid" aria-label="Lecturas de proximidad">
+  <article class="panel"><div class="sensor-top"><div class="meta">SENSOR 01 / IZQUIERDA</div><span class="indicator" id="pillIzq">Sin lectura</span></div><div class="sensor-name">Distancia izquierda</div><div class="big"><span id="left">—</span><span class="unit">cm</span></div><div class="bar"><div class="fill" id="barIzq"></div></div><div class="flex"><span class="small">LED externo IO12 + rojo integrado IO33</span><span class="small" id="ledIzq">● Esperando</span></div></article>
+  <article class="panel"><div class="sensor-top"><div class="meta">SENSOR 02 / DERECHA</div><span class="indicator" id="pillDer">Sin lectura</span></div><div class="sensor-name">Distancia derecha</div><div class="big"><span id="right">—</span><span class="unit">cm</span></div><div class="bar"><div class="fill" id="barDer"></div></div><div class="flex"><span class="small">LED externo IO4 + flash blanco integrado</span><span class="small" id="ledDer">● Esperando</span></div></article>
+</section>
+<section class="panel" style="margin-top:16px"><div class="decision"><div><div class="meta">DECISIÓN ACTUAL</div><div id="decision" class="decision-title">Sin datos</div><div class="small" id="contexto">Recibe JSON del firmware nuevo o lecturas del formato antiguo.</div></div><div><div class="mode" id="mode">MODO: —</div><div class="small" style="margin-top:12px">Confianza del modelo: <strong id="confidence">—</strong></div></div></div></section>
+<div class="three"><div class="stat"><span class="meta">MUESTRAS RECIBIDAS</span><div class="statnum" id="count">0</div></div><div class="stat"><span class="meta">UMBRAL DE OBSTÁCULO</span><div class="statnum">20 <span style="font-size:.75rem;color:var(--mut)">cm</span></div></div><div class="stat"><span class="meta">PUERTO USB</span><div class="statnum" id="port" style="font-size:1.15rem">Elegir USB</div></div></div>
+<section class="panel chart-panel"><div class="rowbuttons"><h2>Distancias en tiempo real</h2><div class="legend"><span><i class="swatch" style="background:#60c3ff"></i>Izquierda</span><span><i class="swatch" style="background:#ffbd69"></i>Derecha</span><span><i class="swatch" style="background:#fb7377"></i>Umbral 20 cm</span></div></div><div class="chart-wrap"><canvas id="chart" aria-label="Gráfica de mediciones"></canvas></div></section>
+<section class="panel chart-panel"><div class="rowbuttons"><h2>Últimas mediciones</h2><button type="button" class="btn" id="exportar">↓ Exportar CSV</button></div><div class="table-wrap"><table><thead><tr><th>Hora</th><th>Izquierda (cm)</th><th>Derecha (cm)</th><th>Decisión</th><th>Modo</th></tr></thead><tbody id="records"><tr><td colspan="5" style="color:var(--mut)">Esperando datos del ESP32-CAM...</td></tr></tbody></table></div></section>
+<section class="panel chart-panel" style="margin-top:16px">
+  <h2>Diagnóstico de conexión USB</h2>
+  <div class="flex" style="justify-content:flex-start;gap:28px;flex-wrap:wrap;margin-bottom:9px">
+    <span class="small">Líneas USB recibidas: <b id="lineasRecibidas">0</b></span>
+    <span class="small">Bytes recibidos: <b id="bytesRecibidos">0</b></span>
+    <span class="small">Última medición: <b id="last">—</b></span>
+  </div>
+  <div class="meta">Última línea recibida (para identificar problemas)</div>
+  <pre id="ultimaLinea" style="white-space:pre-wrap;word-break:break-all;color:var(--mut);font:12px/1.5 ui-monospace,Consolas,monospace">Todavía no hay datos.</pre>
+</section>
+<p class="foot"><strong>Nota:</strong> El modo REGLAS_PRUEBA solo comprueba sensores y LEDs; no es inferencia neuronal. El modo TINYML utiliza el modelo de Colab. Dos sensores laterales no garantizan un camino frontal despejado. El puerto COM se abre en <strong>tu PC</strong> desde Chrome/Edge mediante Web Serial (115200 baudios); AWS solo aloja la página. También puedes abrirlo en local mediante <code>abrir_local.cmd</code>. Cierra el Monitor Serie de Arduino antes de conectar.</p>
+</main>
+<script>
+'use strict';
+const $ = id => document.getElementById(id);
+const formatear = v => Number.isFinite(v) && v >= 0 ? v.toFixed(2) : '—';
+const etiquetas = ['AVANZAR','IZQUIERDA','DERECHA','DETENER'];
+let puerto = null, lector = null, tareaLectura = null, cerrando = false;
+let conectando = false, conectado = false;
+let ultimoDato = 0, inicioPuerto = 0, contador = 0, bytes = 0, lineas = 0;
+let historial = [], registros = [], ultimoRaw = '(todavía no se reciben líneas)';
+let advertenciaSinDatos = false;
+
+function aviso(texto) {
+  $('notice').textContent = texto;
+  $('notice').classList.toggle('visible', Boolean(texto));
+}
+function estado() {
+  const ahora = Date.now();
+  const vivo = conectado && ultimoDato > 0 && ahora - ultimoDato < 3500;
+  const abiertoSinDatos = conectado && !vivo;
+  $('statusDot').classList.toggle('ok', vivo);
+  $('statusText').textContent = conectando ? 'Abriendo puerto USB…' :
+    !conectado ? 'Sin conectar' : vivo ? 'USB conectado · datos en vivo' : 'USB abierto · sin datos recientes';
+  $('conectar').disabled = conectando || conectado;
+  $('reconectar').disabled = conectando || conectado;
+  $('desconectar').disabled = !conectado && !conectando;
+  $('bytesRecibidos').textContent = bytes.toLocaleString('es-PE');
+  $('lineasRecibidas').textContent = lineas.toLocaleString('es-PE');
+  if (abiertoSinDatos && !advertenciaSinDatos && ahora - inicioPuerto > 6000) {
+    advertenciaSinDatos = true;
+    aviso(lineas === 0 ?
+      'Puerto abierto, pero no llegaron datos. Confirma que el ESP32-CAM ejecuta el programa nuevo a 115200 baudios y que IO0 NO está unido a GND.' :
+      'El puerto recibe texto, pero todavía no llegan distancias válidas. Revisa la última línea y carga el sketch de este ZIP para enviar JSON.');
+  }
+}
+function mostrarSensor(izquierda, distancia, obstaculo) {
+  const llave = izquierda ? 'Izq':'Der';
+  $(izquierda ? 'left':'right').textContent = formatear(distancia);
+  const badge = $('pill'+llave);
+  badge.textContent = distancia < 0 ? 'LECTURA INVÁLIDA' : obstaculo ? 'OBSTÁCULO' : 'DESPEJADO';
+  badge.classList.toggle('alert', obstaculo || distancia < 0);
+  const barra = $('bar'+llave);
+  barra.style.width = distancia < 0 ? '0%' : `${Math.min(100,distancia/120*100)}%`;
+  barra.classList.toggle('alert', obstaculo);
+  const led = $('led'+llave);
+  led.textContent = '● ' + (obstaculo ? 'Encendido' : 'Apagado');
+  led.style.color = obstaculo ? '#fb7377' : '#61e3ad';
+}
+function grafica() {
+  const canvas = $('chart'), ctx = canvas.getContext('2d');
+  const pixelRatio = window.devicePixelRatio || 1;
+  const ancho = canvas.clientWidth, alto = canvas.clientHeight;
+  if (!ancho || !alto) return;
+  canvas.width = Math.ceil(ancho * pixelRatio); canvas.height = Math.ceil(alto * pixelRatio);
+  ctx.setTransform(pixelRatio,0,0,pixelRatio,0,0);
+  ctx.clearRect(0,0,ancho,alto);
+  const m={l:42,r:15,t:14,b:27}, w=ancho-m.l-m.r, h=alto-m.t-m.b, max=120;
+  const posY=v=>m.t+h*(1-Math.max(0,Math.min(max,v))/max);
+  ctx.font = '12px system-ui'; ctx.lineWidth = 1;
+  for (const v of [0,20,40,60,80,100,120]) {
+    const y=posY(v); ctx.strokeStyle='#25344c'; ctx.beginPath(); ctx.moveTo(m.l,y);ctx.lineTo(ancho-m.r,y);ctx.stroke();
+    ctx.fillStyle='#8295b1';ctx.fillText(String(v),9,y+4);
+  }
+  ctx.setLineDash([5,4]); ctx.strokeStyle='#fb7377';ctx.beginPath();ctx.moveTo(m.l,posY(20));ctx.lineTo(ancho-m.r,posY(20));ctx.stroke();ctx.setLineDash([]);
+  for (const [key,color] of [['izquierda_cm','#60c3ff'],['derecha_cm','#ffbd69']]) {
+    ctx.strokeStyle=color;ctx.lineWidth=2.5;ctx.beginPath();let dibujando=false;
+    historial.forEach((fila,i)=>{
+      const d=fila[key];if(d<0){dibujando=false;return;}
+      const x=m.l+(historial.length<2?w/2:i*w/(historial.length-1));
+      if(!dibujando){ctx.moveTo(x,posY(d));dibujando=true;} else ctx.lineTo(x,posY(d));
+    });ctx.stroke();
+  }
+}
+function dibujar(fila) {
+  mostrarSensor(true,fila.izquierda_cm,fila.obstaculo_izq);
+  mostrarSensor(false,fila.derecha_cm,fila.obstaculo_der);
+  $('decision').textContent=fila.decision;
+  $('decision').className='decision-title '+(fila.decision==='DETENER'?'stop':fila.decision==='AVANZAR'?'go':'');
+  $('mode').textContent='MODO: '+fila.modo;
+  $('confidence').textContent=fila.confianza===null?'— (no aplica)':(fila.confianza*100).toFixed(1)+' %';
+  $('contexto').textContent=fila.modo==='TINYML' ?
+    'Predicción calculada dentro del ESP32-CAM con la red neuronal. Decisión final con protección de seguridad.' :
+    fila.modo==='SERIE_ANTIGUA' ?
+    'Lecturas del programa antiguo. Para obtener clasificación TinyML y LEDs integrados, carga el nuevo sketch.' :
+    'Prueba con umbral de 20 cm; todavía no ejecuta TinyML.';
+  $('count').textContent=contador.toLocaleString('es-PE');
+  $('last').textContent=fila.hora;
+  grafica();
+  const filas=historial.slice(-10).reverse();
+  $('records').replaceChildren();
+  for (const r of filas) {
+    const tr=document.createElement('tr');
+    for (const valor of [r.hora,formatear(r.izquierda_cm),formatear(r.derecha_cm),r.decision,r.modo]) {
+      const td=document.createElement('td');td.textContent=valor;tr.appendChild(td);
+    }
+    $('records').appendChild(tr);
+  }
+}
+function agregarRegistro(izq,der,obstI,obstD,decision,modelo,confianza,modeloDecision,tiempoUs) {
+  if (![izq,der].every(v=>Number.isFinite(v) && v>=-1 && v<=400)) return false;
+  const fila={hora:new Date().toLocaleTimeString('es-PE'),izquierda_cm:izq,derecha_cm:der,
+    obstaculo_izq:obstI,obstaculo_der:obstD,decision,modo:modelo,
+    confianza,decision_modelo:modeloDecision || '',inferencia_us:tiempoUs || 0};
+  ultimoDato=Date.now(); contador++;
+  historial.push(fila);if(historial.length>160)historial.shift();
+  registros.push(fila);if(registros.length>50000)registros.shift();
+  dibujar(fila);aviso('');advertenciaSinDatos=false;estado();
+  return true;
+}
+function procesarLinea(cadena) {
+  const texto = cadena.trim();if(!texto)return;
+  lineas++; ultimoRaw=texto.slice(0,450);
+  $('ultimaLinea').textContent=ultimoRaw;
+  if(texto.startsWith('{')) {
+    let datos;
+    try { datos=JSON.parse(texto); } catch(e) { return; }
+    if (!datos || typeof datos!=='object') return;
+    const izq=Number(datos.izquierda_cm),der=Number(datos.derecha_cm);
+    const obstI=typeof datos.obstaculo_izq==='boolean' ? datos.obstaculo_izq : izq>0 && izq<20;
+    const obstD=typeof datos.obstaculo_der==='boolean' ? datos.obstaculo_der : der>0 && der<20;
+    const decision=etiquetas.includes(datos.decision) ? datos.decision :
+      izq<0||der<0||obstI&&obstD?'DETENER':obstI?'DERECHA':obstD?'IZQUIERDA':'AVANZAR';
+    const modo=datos.modo==='TINYML' ? 'TINYML':'REGLAS_PRUEBA';
+    const conf=typeof datos.confianza==='number'&&datos.confianza>=0&&datos.confianza<=1?datos.confianza:null;
+    agregarRegistro(izq,der,obstI,obstD,decision,modo,conf,String(datos.decision_modelo||''),Number(datos.inferencia_us)||0);
+    return;
+  }
+  // Compatibilidad: programa antiguo "IZQUIERDA: 16.16 cm | DERECHA: 17.24 cm".
+  const izquierda=texto.match(/(?:IZQUIERDA|IZQ)\s*:\s*(-?\d+(?:\.\d+)?)/i);
+  const derecha=texto.match(/DERECHA\s*:\s*(-?\d+(?:\.\d+)?)/i);
+  if (izquierda && derecha) {
+    const izq=Number(izquierda[1]),der=Number(derecha[1]);
+    const oi=izq>0&&izq<20,od=der>0&&der<20;
+    agregarRegistro(izq,der,oi,od,izq<0||der<0||oi&&od?'DETENER':oi?'DERECHA':od?'IZQUIERDA':'AVANZAR',
+      'SERIE_ANTIGUA',null,'',0);
+  } else if (texto.includes('ERROR_TINYML')) {
+    aviso('El ESP32-CAM informó un error del modelo: '+texto);
+  }
+}
+
+// ReadableStream / TextDecoder: soporta fragmentos USB partidos arbitrariamente.
+async function leerContinuamente(p) {
+  let buffer='', decoder=new TextDecoder();
+  try {
+    while (p.readable && !cerrando && puerto===p) {
+      const r=p.readable.getReader();lector=r;
+      try {
+        while (!cerrando) {
+          const {value,done}=await r.read();
+          if (done)break;
+          if (!value)continue;
+          bytes+=value.byteLength;
+          buffer+=decoder.decode(value,{stream:true});
+          if(buffer.length>25000) buffer=buffer.slice(-1000);
+          let corte;
+          while ((corte=buffer.indexOf('\n'))>=0) {
+            const linea=buffer.slice(0,corte).trim();
+            buffer=buffer.slice(corte+1);
+            procesarLinea(linea);
+          }
+          estado();
+        }
+      } finally {
+        r.releaseLock();if(lector===r)lector=null;
+      }
+    }
+  }catch(error) {
+    if(!cerrando) aviso('Error leyendo el USB: '+error.message+'. Desconecta y vuelve a conectar.');
+  }finally {
+    if(!cerrando && puerto===p) {
+      conectado=false;
+      try {await p.close();}catch(e){}
+      puerto=null;
+      $('port').textContent='Elegir USB';
+      estado();
+    }
+  }
+}
+async function abrirPuerto(p) {
+  puerto=p;
+  try {
+    await puerto.open({baudRate:115200,bufferSize:4096});
+    // Algunas bases ESP32-CAM-MB reinician la placa al abrir el puerto.
+    // Desactivar señales hardware evita mantener RTS/DTR activas tras abrir.
+    if (typeof puerto.setSignals==='function') {
+      try {await puerto.setSignals({dataTerminalReady:false,requestToSend:false});} catch(e){}
+    }
+    conectado=true;conectando=false;cerrando=false;
+    ultimoDato=0;inicioPuerto=Date.now();advertenciaSinDatos=false;
+    let info={};try{info=puerto.getInfo();}catch(e){}
+    $('port').textContent=info.usbVendorId ? 'USB '+info.usbVendorId.toString(16).toUpperCase() : 'USB elegido';
+    $('mensajePuerto').textContent='115200 baudios · leyendo continuamente · puedes mover obstáculos';
+    estado();
+    tareaLectura=leerContinuamente(puerto);
+  } catch(e) {
+    try {await puerto.close();} catch(ignore){}
+    puerto=null;conectando=false;conectado=false;estado();
+    aviso('No se pudo abrir el puerto: '+e.message+'. Cierra el Monitor Serie y cualquier otro programa que esté usando COM.');
+  }
+}
+function validarEntorno() {
+  if(!window.isSecureContext || !('serial' in navigator)) {
+    aviso('Web Serial no está disponible: abre esta página en Chrome/Edge de escritorio desde HTTPS seguro (https://18.191.113.248/ESP32/experimento3/) o usa abrir_local.cmd (http://127.0.0.1:18763/). Revisa también que el certificado HTTPS sea válido y que el navegador permita acceso a puertos serie.');
+    return false;
+  }
+  return true;
+}
+async function conectar() {
+  if(conectando||conectado)return;
+  aviso('');if(!validarEntorno())return;
+  conectando=true;estado();
+  try {
+    // Es una llamada directa del clic del usuario: Chrome muestra el selector COM.
+    const p=await navigator.serial.requestPort();
+    await abrirPuerto(p);
+  }catch(e) {
+    conectando=false;estado();
+    if(e.name!=='NotFoundError')aviso('No fue posible seleccionar el puerto: '+e.message);
+  }
+}
+async function reconectar() {
+  if(conectando||conectado)return;
+  aviso('');if(!validarEntorno())return;
+  conectando=true;estado();
+  try {
+    const disponibles=await navigator.serial.getPorts();
+    if(disponibles.length===0) {
+      conectando=false;estado();
+      aviso('No hay puertos autorizados. Usa «Conectar ESP32-CAM» para elegir el COM.');
+      return;
+    }
+    await abrirPuerto(disponibles[0]);
+  }catch(e) {conectando=false;estado();aviso('Reconexión fallida: '+e.message);}
+}
+async function desconectar() {
+  if(!puerto)return;
+  cerrando=true;conectando=false;
+  try {if(lector) await lector.cancel();}catch(e){}
+  try {if(tareaLectura) await tareaLectura;}catch(e){}
+  try {await puerto.close();}catch(e){}
+  puerto=null;lector=null;tareaLectura=null;conectado=false;ultimoDato=0;cerrando=false;
+  $('port').textContent='Elegir USB';
+  $('mensajePuerto').textContent='Desconectado · cierra el monitor serie antes de conectar';
+  estado();
+}
+function exportar() {
+  if(!registros.length){aviso('Todavía no hay mediciones para exportar.');return;}
+  const campos=['hora','izquierda_cm','derecha_cm','obstaculo_izq','obstaculo_der','decision_modelo','decision','confianza','inferencia_us','modo'];
+  const csv=[campos.join(','),...registros.map(f=>campos.map(k=>f[k]===null?'':String(f[k])).join(','))].join('\r\n');
+  const uri=URL.createObjectURL(new Blob(['\ufeff'+csv],{type:'text/csv;charset=utf-8'}));
+  const a=document.createElement('a');a.href=uri;a.download='experimento3_mediciones_reales.csv';a.click();
+  setTimeout(()=>URL.revokeObjectURL(uri),1000);
+}
+$('conectar').addEventListener('click',conectar);
+$('reconectar').addEventListener('click',reconectar);
+$('desconectar').addEventListener('click',desconectar);
+$('exportar').addEventListener('click',exportar);
+$('limpiar').addEventListener('click',()=>{
+  historial=[];registros=[];contador=0; $('count').textContent='0';
+  $('records').replaceChildren();grafica();aviso('');
+});
+window.addEventListener('resize',grafica);
+window.addEventListener('beforeunload',()=>{if(lector)lector.cancel().catch(()=>{});});
+setInterval(estado,1000);
+estado();grafica();
+</script>
+</body></html>
