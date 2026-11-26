@@ -39,7 +39,7 @@ git pull --ff-only origin main
 bash "TAREA6 EXPERIMENTOS TINYML/experimento3/Deploy/deploy_ec2.sh"
 ```
 
-El script agrega solo la ruta del experimento 3 al Nginx HTTPS activo (`esp32-https`).
+El script agrega solo la ruta del experimento 3 al Nginx HTTPS activo (detectado automáticamente).
 Publica los archivos en `/var/www/esp32-experimento3/` y valida `nginx -t` antes de recargar.
 Conserva un respaldo del vhost, y lo restaura si falla la validación.
 
